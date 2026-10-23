@@ -454,6 +454,21 @@ button.txtcol{background:none;text-align:left;align-items:flex-start;padding:10p
 
 .scanvid{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:14px;background:#000;border:1px solid var(--line)}
 
+.ns{display:inline-grid;place-items:center;flex:none;width:30px;height:30px;border-radius:9px;font-weight:800;font-size:.95rem}
+.ns.big{width:72px;height:72px;border-radius:18px;font-size:2.4rem;font-family:var(--serif)}
+.qtop{display:flex;align-items:center;gap:16px}
+.qtop p{margin:0;color:var(--ink-2);font-size:.9rem}
+.qtop p b{display:block;color:var(--ink);font-size:1.05rem;margin-bottom:2px}
+.qlist{list-style:none;margin:0;padding:0}
+.qlist li{border-top:1px solid var(--line)}
+.qlist li:first-child{border-top:0}
+.qrow{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:11px 0}
+.qrow .extxt{flex:1;min-width:0}
+.novatag{display:inline-block;font-size:.72rem;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--raise);color:var(--ink-2)}
+.estbox{margin-top:12px;padding:14px 16px;border:1px dashed var(--line);border-radius:14px;color:var(--ink-2);font-size:.88rem}
+.estbox .btn{margin-top:10px}
+.estbox p{margin:0}
+
 @media (prefers-reduced-motion: reduce){
   *{transition:none !important;animation:none !important}
 }
@@ -594,7 +609,14 @@ function normHist(x){
   const strs = a => (Array.isArray(a) ? a : []).map(String).filter(t => /^\d+\|/.test(t)).sort((a,b) => parseInt(a,10) - parseInt(b,10)).slice(-HCAP);
   return { name:String(x.name), rayon:RAYONS.includes(x.rayon) ? x.rayon : 'Autre',
     dates:(Array.isArray(x.dates) ? x.dates : []).map(Number).filter(n => n > 0).sort((a,b) => a - b).slice(-HCAP),
-    adds:strs(x.adds), px:strs(x.px), lastPrice:Math.max(0, Math.round(Number(x.lastPrice) || 0)) };
+    adds:strs(x.adds), px:strs(x.px), lastPrice:Math.max(0, Math.round(Number(x.lastPrice) || 0)), q:normQ(x.q) };
+}
+function normQ(q){
+  if (!q || typeof q !== 'object') return null;
+  const ns = /^[a-e]$/.test(q.ns) ? q.ns : '';
+  const nova = [1,2,3,4].includes(parseInt(q.nova, 10)) ? parseInt(q.nova, 10) : 0;
+  if (!ns && !nova) return null;
+  return { ns, nova, src:['scan','manuel','match','frais'].includes(q.src) ? q.src : 'match', ref:String(q.ref || '').slice(0,60) };
 }
 function normTemplate(t){
   return { id:String(t.id), name:String(t.name || 'Modèle').slice(0,40), ts:Number(t.ts) || 0,
@@ -709,7 +731,7 @@ function parseEntry(t){
   else if ((m = t.match(/^(.+?)\s*(?:x|×)\s*(\d{1,2})$/i))){ name = m[1]; qty = +m[2]; }
   return { name:name.trim(), qty:Math.max(1, qty) };
 }
-function newHist(name, rayon){ return { name, rayon, dates:[], adds:[], px:[], lastPrice:0 }; }
+function newHist(name, rayon){ return { name, rayon, dates:[], adds:[], px:[], lastPrice:0, q:null }; }
 function recordAdd(key, name, rayon){
   const h = state.history[key] || (state.history[key] = newHist(name, rayon));
   const e = Date.now() + '|' + (state.me || '');
@@ -967,7 +989,7 @@ function columns(cols, colors, fmtTop, aria){
     const tot = c.vals.reduce((a,b) => a + b, 0);
     return '<div class="col" title="' + esc((c.title || c.label) + ' : ' + fmtTop(tot)) + '"><span class="ctop">' + (tot ? esc(fmtTop(tot)) : '') + '</span>' +
       '<div class="cwrap"><div class="cbar" style="height:' + (tot / max * 100).toFixed(1) + '%">' +
-      c.vals.map((v,i) => v > 0 ? '<i style="flex:' + v + ';background:' + (c.hi && colors.length === 1 ? '#9DBDFF' : colors[i]) + '"></i>' : '').join('') + '</div></div>' +
+      c.vals.map((v,i) => v > 0 ? '<i style="flex:' + v + ';background:' + (c.color || (c.hi && colors.length === 1 ? '#9DBDFF' : colors[i])) + '"></i>' : '').join('') + '</div></div>' +
       '<span class="clab">' + esc(c.label) + '</span></div>';
   }).join('') + '</div>';
 }
@@ -1027,6 +1049,8 @@ function statsHtml(){
     h += chartCard('Qui remplit la liste ?', '', '<p class="none">Renseignez votre prénom dans Réglages pour voir qui ajoute quoi.</p>');
   }
 
+  h += qualityHtml(buys);
+
   const priced = buys.filter(e => e.cents > 0);
   if (priced.length){
     const m = new Map();
@@ -1057,6 +1081,154 @@ function statsHtml(){
   }
   return h + (rows ? historyBlock() : '');
 }
+/* ---------- Qualité des achats ---------- */
+const NS = ['a','b','c','d','e'];
+const NS_COL = { a:'#038141', b:'#85BB2F', c:'#FECB02', d:'#EE8100', e:'#E63E11' };
+const NS_INK = { a:'#FFFFFF', b:'#10200A', c:'#2B2400', d:'#2B1500', e:'#FFFFFF' };
+const NOVA_COL = ['#7BD88F','#F2D45C','#FFB86B','#FF7B9C'];
+const NOVA_LAB = ['Non transformés','Ingrédients culinaires','Transformés','Ultra-transformés'];
+const SRC_LAB = { scan:'scanné', manuel:'corrigé', match:'estimé', frais:'estimé', avg:'estimé' };
+const nsBadge = (g, cls) => g ? '<span class="ns ' + (cls || '') + '" style="background:' + NS_COL[g] + ';color:' + NS_INK[g] + '" aria-label="Nutri-Score ' + g.toUpperCase() + '">' + g.toUpperCase() + '</span>' : '';
+const FRESH = 'Fruits et légumes';
+
+function rayonAverages(){
+  const acc = {};
+  Object.values(state.history).forEach(h => {
+    if (!h.q) return;
+    const r = acc[h.rayon] || (acc[h.rayon] = { ns:[], nova:[] });
+    if (h.q.ns) r.ns.push(NS.indexOf(h.q.ns));
+    if (h.q.nova) r.nova.push(h.q.nova);
+  });
+  const out = {};
+  Object.entries(acc).forEach(([r,v]) => {
+    const m = a => a.reduce((x,y) => x + y, 0) / a.length;
+    out[r] = { ns:v.ns.length ? NS[Math.round(m(v.ns))] : '', nova:v.nova.length ? Math.round(m(v.nova)) : 0 };
+  });
+  return out;
+}
+function effQuality(h, avgs){
+  if (h.q) return h.q;
+  if (h.rayon === FRESH) return { ns:'', nova:1, src:'frais' };
+  const a = avgs[h.rayon];
+  return a && (a.ns || a.nova) ? { ns:a.ns, nova:a.nova, src:'avg' } : null;
+}
+const needsEstimate = () => Object.entries(state.history).filter(([k,h]) => h.dates.length && !h.q && h.rayon !== FRESH);
+
+const Q_DELAY = (typeof window.__caddieQDelay === 'number') ? window.__caddieQDelay : 6500;
+let qBusy = false, qCancel = false;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function median(arr){ const a = arr.slice().sort((x,y) => x - y); return a.length ? a[Math.floor((a.length - 1) / 2)] : 0; }
+async function offMatch(name){
+  const url = 'https://world.openfoodfacts.org/cgi/search.pl?search_terms=' + encodeURIComponent(name) +
+    '&search_simple=1&action=process&json=1&page_size=12&sort_by=unique_scans_n&tagtype_0=countries&tag_contains_0=contains&tag_0=france&fields=code,product_name,nutriscore_grade,nova_group';
+  const j = await fetchJson(url, 9000);
+  const list = (j && Array.isArray(j.products)) ? j.products : [];
+  const gs = list.map(x => NS.indexOf(x.nutriscore_grade)).filter(i => i >= 0);
+  const nv = list.map(x => parseInt(x.nova_group, 10)).filter(n => n >= 1 && n <= 4);
+  if (!gs.length && !nv.length) return null;
+  const ref = (list.find(x => x.product_name) || {}).product_name || '';
+  return { ns:gs.length ? NS[median(gs)] : '', nova:nv.length ? median(nv) : 0, src:'match', ref:String(ref).slice(0,60) };
+}
+async function estimateMissing(){
+  if (qBusy) return;
+  if (!navigator.onLine){ toast('Connectez-vous à internet pour estimer la qualité.'); return; }
+  const todo = needsEstimate().sort((a,b) => b[1].dates.length - a[1].dates.length).slice(0, 10);
+  if (!todo.length){ toast('Rien à estimer pour le moment.'); return; }
+  qBusy = true; qCancel = false;
+  let found = 0;
+  for (let i = 0; i < todo.length && !qCancel; i++){
+    const [k,h] = todo[i];
+    toast('Estimation ' + (i + 1) + '/' + todo.length + ' : ' + h.name);
+    const r = await offMatch(h.name);
+    if (r && state.history[k]){ state.history[k].q = normQ(r); pushHistQ(k, state.history[k]); save(); found++; if (tab === 'stats') render(); }
+    if (i < todo.length - 1 && !qCancel) await sleep(Q_DELAY);
+  }
+  qBusy = false;
+  toast(qCancel ? 'Estimation arrêtée' : 'Estimation terminée : ' + found + ' ' + plural(found,'produit trouvé','produits trouvés') + ' sur ' + todo.length);
+  if (tab === 'stats') render();
+}
+function editQuality(key){
+  const h = state.history[key]; if (!h) return;
+  const q = h.q || { ns:'', nova:0 };
+  const el = $('#sheet');
+  el.innerHTML = '<div class="sheet-bg" data-act="sheet-close"></div><form class="sheet" id="qform" autocomplete="off"><h3>' + esc(h.name) + '</h3>' +
+    '<div class="lbl">Corrigez la qualité de ce produit : elle servira dans vos statistiques.</div>' +
+    '<label class="lbl">Nutri-Score<select id="q-ns" class="field"><option value="">Inconnu</option>' + NS.map(g => '<option value="' + g + '"' + (q.ns === g ? ' selected' : '') + '>' + g.toUpperCase() + '</option>').join('') + '</select></label>' +
+    '<label class="lbl">Niveau de transformation (NOVA)<select id="q-nova" class="field"><option value="0">Inconnu</option>' + NOVA_LAB.map((l,i) => '<option value="' + (i + 1) + '"' + (q.nova === i + 1 ? ' selected' : '') + '>' + (i + 1) + ' : ' + l + '</option>').join('') + '</select></label>' +
+    '<div class="row"><button type="submit" class="btn">Enregistrer</button><button type="button" class="btn soft" data-act="sheet-close">Annuler</button></div>' +
+    (h.q ? '<button type="button" class="btn soft" data-act="sheet-delete">Retirer l’évaluation (revenir à l’estimation)</button>' : '') + '</form>';
+  el.hidden = false;
+  sheetCfg = { onDelete:() => { closeSheet(); h.q = null; pushHistQ(key, h); save(); render(); toast('Évaluation retirée'); } };
+  $('#qform').addEventListener('submit', ev => {
+    ev.preventDefault();
+    const ns = $('#q-ns').value, nova = parseInt($('#q-nova').value, 10) || 0;
+    closeSheet();
+    if (!ns && !nova){ h.q = null; pushHistQ(key, h); save(); render(); return; }
+    setQuality(key, { ns, nova, src:'manuel', ref:'' }); render(); toast('Qualité enregistrée');
+  });
+}
+function qualityHtml(buys){
+  if (!buys.length) return '';
+  const avgs = rayonAverages();
+  const qm = {};
+  Object.entries(state.history).forEach(([k,h]) => { qm[k] = effQuality(h, avgs); });
+  const nsC = { a:0, b:0, c:0, d:0, e:0 }, novaC = [0,0,0,0], srcC = { scan:0, manuel:0, match:0, frais:0, avg:0 };
+  let evaluated = 0;
+  buys.forEach(e => {
+    const q = qm[e.key];
+    if (!q || (!q.ns && !q.nova)) return;
+    evaluated++; srcC[q.src || 'scan']++;
+    if (q.ns) nsC[q.ns]++;
+    if (q.nova) novaC[q.nova - 1]++;
+  });
+  let h = '<h2>Qualité de vos achats</h2>';
+  if (!evaluated){
+    h += chartCard('Nutri-Score et transformation', '', '<p class="none">Scannez des produits, ou lancez une estimation, pour voir la qualité de ce que vous achetez.</p>' + estBox(buys.length, evaluated));
+    return h;
+  }
+  const nsTot = NS.reduce((a,g) => a + nsC[g], 0);
+  const avgG = nsTot ? NS[Math.round(NS.reduce((a,g,i) => a + i * nsC[g], 0) / nsTot)] : '';
+  const exact = srcC.scan + srcC.manuel, est = evaluated - exact;
+  const pct = n => Math.round(n / buys.length * 100);
+  h += '<section class="chart"><div class="qtop">' + (avgG ? nsBadge(avgG, 'big') : '') + '<p><b>' + (avgG ? 'Votre panier : Nutri-Score ' + avgG.toUpperCase() : 'Qualité de votre panier') + '</b> ' +
+    pct(evaluated) + ' % de vos achats sont évalués : ' + pct(exact) + ' % de façon sûre (scannés ou corrigés) et ' + pct(est) + ' % par estimation.</p></div>' + estBox(buys.length, evaluated) + '</section>';
+  if (nsTot){
+    h += chartCard('Répartition par Nutri-Score', 'Nombre d’achats par note, de A (meilleur) à E',
+      columns(NS.map(g => ({ label:g.toUpperCase(), title:'Nutri-Score ' + g.toUpperCase(), vals:[nsC[g]], color:NS_COL[g] })), ['#5B93FF'], v => String(v), 'Achats par Nutri-Score'));
+  }
+  const novaTot = novaC.reduce((a,b) => a + b, 0);
+  if (novaTot){
+    h += chartCard('Niveau de transformation (NOVA)', '4 correspond aux produits ultra-transformés',
+      donut(NOVA_LAB.map((l,i) => ({ label:(i + 1) + ' ' + l, value:novaC[i], color:NOVA_COL[i] })), Math.round(novaC[3] / novaTot * 100) + ' %', 'NOVA 4'));
+    const months = [];
+    for (let i = 5; i >= 0; i--){ const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i); months.push(d); }
+    const evs = buyEvents();
+    const cols = months.map(d => {
+      let t = 0, u = 0;
+      evs.forEach(e => { const dd = new Date(e.ts); if (dd.getFullYear() === d.getFullYear() && dd.getMonth() === d.getMonth()){ const q = qm[e.key]; if (q && q.nova){ t++; if (q.nova === 4) u++; } } });
+      return { label:d.toLocaleDateString('fr-FR', { month:'short' }).replace('.', ''), title:cap(d.toLocaleDateString('fr-FR', { month:'long' })), vals:[t ? Math.round(u / t * 100) : 0], color:'#FF7B9C' };
+    });
+    if (cols.filter(c => c.vals[0] > 0).length >= 2) h += chartCard('Part d’ultra-transformés par mois', 'Parmi les achats évalués', columns(cols, ['#FF7B9C'], v => v + ' %', 'Part des produits ultra-transformés par mois'));
+  }
+  const counts = {};
+  buys.forEach(e => { counts[e.key] = (counts[e.key] || 0) + 1; });
+  const rows = Object.keys(counts).map(k => ({ k, n:counts[k], q:qm[k], h:state.history[k] })).filter(x => x.q && x.h);
+  const bad = rows.filter(x => x.q.ns === 'd' || x.q.ns === 'e' || x.q.nova === 4).sort((a,b) => b.n - a.n).slice(0, 6);
+  const good = rows.filter(x => (x.q.ns === 'a' || x.q.ns === 'b') && (!x.q.nova || x.q.nova <= 2)).sort((a,b) => b.n - a.n).slice(0, 5);
+  const row = x => '<li><button type="button" class="qrow" data-act="q-edit" data-key="' + esc(x.k) + '" aria-label="Corriger la qualité de ' + esc(x.h.name) + '">' + (nsBadge(x.q.ns) || '<span class="ns" style="background:var(--raise);color:var(--ink-2)">?</span>') +
+    '<span class="extxt"><span class="extitle">' + esc(x.h.name) + '</span><span class="exmeta">Acheté ' + x.n + ' fois, ' + (x.q.nova ? 'NOVA ' + x.q.nova + ', ' : '') + SRC_LAB[x.q.src || 'scan'] + (x.q.ref && x.q.src === 'match' ? ' (proche de « ' + esc(x.q.ref) + ' »)' : '') + '</span></span></button></li>';
+  if (bad.length) h += chartCard('Produits à surveiller', 'Nutri-Score D ou E, ou ultra-transformés. Touchez un produit pour corriger.', '<ul class="qlist">' + bad.map(row).join('') + '</ul>');
+  if (good.length) h += chartCard('Vos bons réflexes', 'Nutri-Score A ou B, peu transformés', '<ul class="qlist">' + good.map(row).join('') + '</ul>');
+  return h;
+}
+function estBox(total, evaluated){
+  const n = needsEstimate().length;
+  if (qBusy) return '<div class="estbox"><p>Estimation en cours…</p><button type="button" class="btn soft" data-act="q-stop">Arrêter</button></div>';
+  if (!n) return '<div class="estbox"><p>Les produits scannés donnent une qualité exacte. Les autres sont estimés par la moyenne de leur rayon.</p></div>';
+  return '<div class="estbox"><p>' + n + ' ' + plural(n,'produit n’est','produits ne sont') + ' pas évalué' + (n > 1 ? 's' : '') + '. Caddie peut les rapprocher de produits existants (les plus scannés en France sur Open Food Facts), 10 à la fois. Sans résultat, la moyenne de votre rayon est utilisée. Touchez un produit de la liste pour corriger une estimation.</p>' +
+    '<button type="button" class="btn" data-act="q-estimate">Estimer ' + Math.min(n, 10) + ' ' + plural(Math.min(n, 10),'produit','produits') + '</button></div>';
+}
+
 function historyBlock(){ return '<h2>Tous vos produits</h2>' + historyHtml(); }
 
 function shareHtml(){
@@ -1200,27 +1372,39 @@ if (SR){
 const BD = window.BarcodeDetector;
 let scanStop = null, pendingBarcode = null;
 function stopScan(){ if (scanStop){ const f = scanStop; scanStop = null; try { f(); } catch(e){} } }
-async function lookupBarcode(code){
-  if (state.barcodes[code]) return state.barcodes[code];
+async function fetchJson(url, ms){
+  const ctl = new AbortController();
+  const to = setTimeout(() => ctl.abort(), ms || 8000);
   try {
-    const ctl = new AbortController();
-    const to = setTimeout(() => ctl.abort(), 7000);
-    const r = await fetch('https://world.openfoodfacts.org/api/v2/product/' + code + '.json?fields=product_name,product_name_fr,generic_name_fr', { signal:ctl.signal });
-    clearTimeout(to);
+    const r = await fetch(url, { signal:ctl.signal });
     if (!r.ok) return null;
-    const j = await r.json();
-    const pr = j && j.status === 1 && j.product;
-    const n = pr && (pr.product_name_fr || pr.product_name || pr.generic_name_fr);
-    return n ? String(n).trim().slice(0, 50) : null;
+    return await r.json();
   } catch(e){ return null; }
+  finally { clearTimeout(to); }
+}
+async function lookupBarcode(code){
+  if (state.barcodes[code]) return { name:state.barcodes[code], ns:'', nova:0, local:true };
+  const j = await fetchJson('https://world.openfoodfacts.org/api/v2/product/' + code + '.json?fields=product_name,product_name_fr,generic_name_fr,nutriscore_grade,nova_group');
+  const pr = j && j.status === 1 && j.product;
+  const n = pr && (pr.product_name_fr || pr.product_name || pr.generic_name_fr);
+  if (!n) return null;
+  return { name:String(n).trim().slice(0, 50), ns:/^[a-e]$/.test(pr.nutriscore_grade) ? pr.nutriscore_grade : '', nova:parseInt(pr.nova_group, 10) || 0 };
+}
+function setQuality(key, q){
+  const h = state.history[key]; if (!h) return;
+  h.q = normQ(q);
+  pushHistQ(key, h);
+  save();
 }
 async function handleBarcode(code){
   toast('Code ' + code + ', recherche du produit…');
-  const name = await lookupBarcode(code);
-  if (name){
-    state.barcodes[code] = name;
-    addItem(name, null, 1); save(); render();
-    toast('Ajouté : ' + cap(name));
+  const r = await lookupBarcode(code);
+  if (r){
+    state.barcodes[code] = r.name;
+    addItem(r.name, null, 1);
+    if (r.ns || r.nova) setQuality(norm(cap(r.name)), { ns:r.ns, nova:r.nova, src:'scan', ref:r.name });
+    save(); render();
+    toast('Ajouté : ' + cap(r.name) + (r.ns ? ', Nutri-Score ' + r.ns.toUpperCase() : ''));
   } else {
     pendingBarcode = code;
     toast('Produit inconnu. Écrivez son nom : Caddie s’en souviendra.');
@@ -1271,6 +1455,7 @@ function toast(msg, label, fn){
 }
 
 /* ---------- Données de démonstration, export, import ---------- */
+const DEMO_Q = { 'Lait':{ ns:'b', nova:1 }, 'Œufs':{ ns:'a', nova:1 }, 'Yaourts':{ ns:'b', nova:3 }, 'Pain de mie':{ ns:'c', nova:4 }, 'Pâtes':{ ns:'a', nova:3 }, 'Poulet':{ ns:'a', nova:1 }, 'Jambon':{ ns:'c', nova:4 }, 'Glace':{ ns:'e', nova:4 }, 'Café':{ ns:'', nova:2 }, 'Eau':{ ns:'a', nova:1 } };
 function loadDemo(){
   if (state.share) return;
   const demo = [
@@ -1292,7 +1477,7 @@ function loadDemo(){
       if (i % 4 === 0) adds.push((ts - 2 * DAY) + '|' + (n % 2 ? 'Zoé' : 'Léa'));
     }
     const srt = a => a.sort((x,y) => parseInt(x,10) - parseInt(y,10)).slice(-HCAP);
-    state.history[key] = { name, rayon, dates:dates.sort((a,b) => a - b).slice(-HCAP), px:srt(pxs), adds:srt(adds), lastPrice:px };
+    state.history[key] = { name, rayon, dates:dates.sort((a,b) => a - b).slice(-HCAP), px:srt(pxs), adds:srt(adds), lastPrice:px, q:DEMO_Q[name] ? { ...DEMO_Q[name], src:'scan', ref:name } : null };
     delete state.dismissed[key];
   });
   if (!state.people.length && !state.expenses.length){
@@ -1413,7 +1598,8 @@ function pushHistDate(it, ts, add, pxe){
   if (add && it.price) d.lastPrice = it.price;
   fb.fs.setDoc(dref('history', hid(it.key)), d, { merge:true }).catch(onErr);
 }
-function histData(k, h){ return { name:h.name, key:k, rayon:h.rayon, dates:h.dates, adds:h.adds || [], px:h.px || [], lastPrice:h.lastPrice || 0 }; }
+function histData(k, h){ return { name:h.name, key:k, rayon:h.rayon, dates:h.dates, adds:h.adds || [], px:h.px || [], lastPrice:h.lastPrice || 0, q:h.q || null }; }
+function pushHistQ(k, h){ if (syncing()) fb.fs.setDoc(dref('history', hid(k)), { name:h.name, key:k, rayon:h.rayon, q:h.q || null }, { merge:true }).catch(onErr); }
 function pushHistFull(k, h){ if (syncing()) fb.fs.setDoc(dref('history', hid(k)), histData(k, h)).catch(onErr); }
 function pushTemplate(t){ if (syncing()) fb.fs.setDoc(dref('templates', t.id), { name:t.name, items:t.items, ts:t.ts || Date.now() }).catch(onErr); }
 function delTemplate(id){ if (syncing()) fb.fs.deleteDoc(dref('templates', id)).catch(onErr); }
@@ -2009,6 +2195,9 @@ $('#app').addEventListener('click', e => {
     }
     case 'backup-go': tab = 'settings'; render(); $('#main').scrollTop = 0; break;
     case 'backup-later': state.hintBackup = true; save(); render(); break;
+    case 'q-edit': editQuality(key); break;
+    case 'q-estimate': estimateMissing(); render(); break;
+    case 'q-stop': qCancel = true; break;
     case 'stat-range': state.statRange = t.dataset.r; save(); render(); break;
     case 'grp': state.curGroup = id; state.expCat = 'all'; save(); render(); break;
     case 'new-group': newGroup(); break;
