@@ -5,9 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Caddie, liste de courses</title>
 <meta name="description" content="Une liste de courses qui apprend ce qu’il vous faut et vous le rappelle avant la panne.">
-<meta name="theme-color" content="#F4F6F1" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0F1624" media="(prefers-color-scheme: dark)">
-<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#0A0F1C">
+<meta name="color-scheme" content="dark">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -16,36 +15,25 @@
 <meta name="apple-mobile-web-app-title" content="Caddie">
 <style>
 :root{
-  color-scheme: light dark;
-  --paper:#F4F6F1;
-  --outer:#E8ECE4;
-  --card:#FFFFFF;
-  --ink:#16233B;
-  --ink-2:#566176;
-  --line:#DCE1D8;
-  --mark:#FFE14D;
-  --mark-ink:#16233B;
-  --go:#1F8A5B;
-  --go-ink:#FFFFFF;
-  --danger:#C23B3B;
-  --focus:#2563EB;
-  --radius:14px;
-}
-@media (prefers-color-scheme: dark){
-  :root{
-    --paper:#0F1624;
-    --outer:#0A101B;
-    --card:#172136;
-    --ink:#EAF0FA;
-    --ink-2:#9AA6BA;
-    --line:#26334A;
-    --mark:#F2D13A;
-    --mark-ink:#16233B;
-    --go:#3DBE8A;
-    --go-ink:#0F1624;
-    --danger:#F08080;
-    --focus:#7AA7FF;
-  }
+  color-scheme: dark;
+  --paper:#0A0F1C;
+  --outer:#05080F;
+  --card:#111A2C;
+  --raise:#17223A;
+  --ink:#E8EDF7;
+  --ink-2:#8F9BB5;
+  --line:#1E2A45;
+  --accent:#5B93FF;
+  --accent-ink:#06101F;
+  --accent-soft:rgba(91,147,255,.14);
+  --mark:rgba(91,147,255,.42);
+  --go:#5B93FF;
+  --go-ink:#06101F;
+  --ok:#4ADE9B;
+  --danger:#FF7B8A;
+  --focus:#9DBDFF;
+  --radius:18px;
+  --serif:ui-serif,"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
@@ -60,7 +48,7 @@ body{
 }
 button,input,select{font:inherit;color:inherit}
 button{cursor:pointer;background:none;border:0;padding:0}
-:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:8px}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:10px}
 [hidden]{display:none !important}
 
 #app{
@@ -75,217 +63,331 @@ button{cursor:pointer;background:none;border:0;padding:0}
 
 /* En-tête */
 .top{
-  padding:calc(env(safe-area-inset-top,0px) + 16px) 20px 12px;
+  padding:calc(env(safe-area-inset-top,0px) + 18px) 22px 14px;
   flex:none;
 }
 .top h1{
   margin:0;
-  font-size:2.1rem;
-  line-height:1.05;
-  font-weight:800;
-  letter-spacing:-0.03em;
+  font-family:var(--serif);
+  font-size:2.5rem;
+  line-height:1;
+  font-weight:600;
+  letter-spacing:-0.02em;
 }
-.top .sub{margin:4px 0 0;color:var(--ink-2);font-size:.95rem}
+.top .sub{margin:8px 0 0;color:var(--ink-2);font-size:.95rem}
 .progress{
-  margin-top:12px;
-  height:6px;
-  border-radius:3px;
+  margin-top:14px;
+  height:4px;
+  border-radius:2px;
   background:var(--line);
   overflow:hidden;
 }
 .progress i{
   display:block;height:100%;
-  background:var(--go);
-  border-radius:3px;
-  transition:width .25s ease;
+  background:var(--accent);
+  border-radius:2px;
+  transition:width .3s ease;
 }
-
 .hd{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.pill{flex:none;font-size:.8rem;font-weight:700;padding:4px 10px;border-radius:99px;border:1px solid var(--line);background:var(--card);display:inline-flex;align-items:center;gap:6px}
-.pill::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ink-2)}
-.pill.ok::before{background:var(--go)}
+.pill{
+  flex:none;font-size:.78rem;font-weight:600;padding:5px 11px;border-radius:99px;
+  border:1px solid var(--line);background:var(--card);color:var(--ink-2);
+  display:inline-flex;align-items:center;gap:7px;
+}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--ink-2)}
+.pill.ok{color:var(--ink)}
+.pill.ok::before{background:var(--ok);box-shadow:0 0 0 3px rgba(74,222,155,.16)}
 .pill.bad::before{background:var(--danger)}
 
 /* Contenu */
 main{
   flex:1;
   overflow-y:auto;
-  padding:4px 16px 28px;
+  padding:2px 16px 32px;
   -webkit-overflow-scrolling:touch;
   overscroll-behavior:contain;
 }
 main h2{
-  margin:22px 4px 6px;
-  font-size:.95rem;
-  font-weight:700;
+  margin:24px 6px 8px;
+  font-size:.92rem;
+  font-weight:600;
+  letter-spacing:.01em;
   color:var(--ink-2);
   display:flex;align-items:center;gap:8px;
 }
 main h2 .n{
-  font-weight:600;font-size:.8rem;
-  background:var(--line);color:var(--ink-2);
+  font-weight:600;font-size:.75rem;
+  background:var(--raise);color:var(--ink-2);
   border-radius:99px;padding:1px 8px;
 }
-ul.list{list-style:none;margin:0;padding:0;background:var(--card);border-radius:var(--radius);border:1px solid var(--line);overflow:hidden}
-ul.list > li{border-top:1px solid var(--line)}
-ul.list > li:first-child{border-top:0}
+ul.list{
+  list-style:none;margin:0;padding:0;
+  background:var(--card);
+  border-radius:var(--radius);
+  border:1px solid var(--line);
+  overflow:hidden;
+}
+ul.list > li + li{border-top:1px solid var(--line)}
 
 /* Articles */
-.item{display:flex;align-items:center;min-height:56px;padding:4px 6px 4px 8px;gap:4px}
-.check{
-  flex:none;width:48px;height:48px;display:grid;place-items:center;
-}
+.item{display:flex;align-items:center;min-height:58px;padding:4px 6px 4px 8px;gap:4px}
+.check{flex:none;width:48px;height:48px;display:grid;place-items:center}
 .check span{
-  width:28px;height:28px;border-radius:50%;
-  border:2px solid var(--ink-2);
+  width:26px;height:26px;border-radius:50%;
+  border:2px solid #3A4868;
   display:grid;place-items:center;
   color:transparent;
-  transition:background .12s ease,border-color .12s ease;
+  transition:background .15s ease,border-color .15s ease,transform .15s ease;
 }
-.check svg{width:16px;height:16px}
+.check:active span{transform:scale(.88)}
+.check svg{width:15px;height:15px}
 .item.done .check span{background:var(--go);border-color:var(--go);color:var(--go-ink)}
 .item .txtcol{flex:1;min-width:0;display:flex;flex-direction:column}
-.item .name{font-size:1.06rem;font-weight:600;overflow-wrap:anywhere}
+.item .name{font-size:1.04rem;font-weight:500;overflow-wrap:anywhere}
 .item .by{color:var(--ink-2);font-size:.8rem}
-.item.done .name{text-decoration:line-through;color:var(--ink-2);font-weight:500}
+.item.done .name{text-decoration:line-through;color:var(--ink-2)}
 .item .qty{
-  font-weight:700;font-size:.85rem;
-  background:var(--line);border-radius:99px;padding:2px 9px;margin-right:2px;
+  font-weight:600;font-size:.82rem;
+  background:var(--accent-soft);color:var(--accent);
+  border-radius:99px;padding:2px 10px;margin-right:2px;
 }
-.rm{flex:none;width:44px;height:44px;display:grid;place-items:center;color:var(--ink-2);border-radius:50%}
-.rm svg{width:18px;height:18px}
-.rm:active{background:var(--line)}
-.item.flash{animation:flash 1.2s ease-out}
-@keyframes flash{from{background:var(--mark);color:var(--mark-ink)}to{background:transparent}}
+.rm{flex:none;width:44px;height:44px;display:grid;place-items:center;color:var(--ink-2);border-radius:50%;opacity:.75}
+.rm svg{width:17px;height:17px}
+.rm:active{background:var(--raise)}
+.item.flash{animation:flash 1.3s ease-out}
+@keyframes flash{from{background:var(--accent-soft)}to{background:transparent}}
 
-/* À prévoir : le surligneur */
-.plan{margin-top:8px}
-.plan h2{margin-top:14px;color:var(--ink);font-size:1.15rem;font-weight:800;letter-spacing:-0.01em}
-.plan .hint{margin:-2px 4px 8px;color:var(--ink-2);font-size:.88rem}
+/* À prévoir : le trait de surligneur bleu */
+.plan{margin-top:10px}
+.plan h2{
+  margin:14px 6px 2px;color:var(--ink);
+  font-family:var(--serif);font-size:1.45rem;font-weight:600;letter-spacing:-0.01em;
+}
+.plan .hint{margin:0 6px 10px;color:var(--ink-2);font-size:.88rem}
+.plan ul.list{background:#0F1A33;border-color:rgba(91,147,255,.35)}
 .sug{display:flex;align-items:stretch}
 .sug-main{
   flex:1;display:flex;align-items:center;gap:12px;
-  text-align:left;padding:10px 6px 10px 14px;min-height:60px;min-width:0;
+  text-align:left;padding:12px 6px 12px 16px;min-height:64px;min-width:0;
 }
-.sug-main .txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.sug-main .txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
 .mark{
   align-self:flex-start;
-  font-weight:800;font-size:1.08rem;
-  background:linear-gradient(transparent 38%,var(--mark) 38%,var(--mark) 92%,transparent 92%);
-  padding:0 4px;margin-left:-4px;
+  font-weight:700;font-size:1.08rem;
+  background:linear-gradient(transparent 62%,var(--mark) 62%,var(--mark) 90%,transparent 90%);
+  padding:0 3px;margin-left:-3px;
   color:var(--ink);
 }
-@media (prefers-color-scheme: dark){.mark{color:var(--ink)}}
-.meta{color:var(--ink-2);font-size:.85rem}
+.meta{color:var(--ink-2);font-size:.84rem}
 .plus{
-  flex:none;width:36px;height:36px;border-radius:50%;
-  background:var(--ink);color:var(--paper);
+  flex:none;width:38px;height:38px;border-radius:12px;
+  background:var(--accent);color:var(--accent-ink);
   display:grid;place-items:center;
 }
 .plus svg{width:18px;height:18px}
-.sug-x{flex:none;width:44px;color:var(--ink-2);display:grid;place-items:center}
-.sug-x svg{width:16px;height:16px}
+.sug-x{flex:none;width:44px;color:var(--ink-2);display:grid;place-items:center;opacity:.75}
+.sug-x svg{width:15px;height:15px}
 
 .ghost{
-  display:block;margin:10px auto 0;
-  padding:10px 16px;border-radius:99px;
-  color:var(--ink-2);font-weight:600;font-size:.92rem;
+  display:block;margin:12px auto 0;
+  padding:10px 18px;border-radius:99px;
+  color:var(--ink-2);font-weight:600;font-size:.9rem;
   border:1px solid var(--line);background:var(--card);
 }
 .empty{
-  margin:28px 8px;padding:20px;border-radius:var(--radius);
+  margin:28px 6px;padding:24px 20px;border-radius:var(--radius);
   border:1.5px dashed var(--line);color:var(--ink-2);text-align:center;
 }
-.empty b{display:block;color:var(--ink);font-size:1.05rem;margin-bottom:4px}
+.empty b{display:block;color:var(--ink);font-family:var(--serif);font-size:1.25rem;font-weight:600;margin-bottom:6px}
 
 /* Historique */
-.hrow{display:flex;align-items:center;gap:10px;padding:12px 8px 12px 14px}
+.hrow{display:flex;align-items:center;gap:10px;padding:14px 8px 14px 16px}
 .hrow .txt{flex:1;min-width:0}
-.hrow .t{font-weight:700;font-size:1.04rem}
-.hrow .r{color:var(--ink-2);font-size:.82rem}
-.hrow .d{color:var(--ink-2);font-size:.88rem;margin-top:2px}
+.hrow .t{font-weight:600;font-size:1.04rem}
+.hrow .r{color:var(--accent);font-size:.8rem;font-weight:500}
+.hrow .d{color:var(--ink-2);font-size:.86rem;margin-top:2px}
 .btn{
-  flex:none;padding:9px 14px;border-radius:99px;font-weight:700;font-size:.9rem;
-  background:var(--ink);color:var(--paper);min-height:40px;
+  flex:none;padding:9px 16px;border-radius:12px;font-weight:600;font-size:.9rem;
+  background:var(--accent);color:var(--accent-ink);min-height:40px;
 }
-.btn.soft{background:transparent;color:var(--ink-2);border:1px solid var(--line)}
-.btn[disabled]{opacity:.55;cursor:default}
-.btn.danger{background:transparent;color:var(--danger);border:1px solid var(--danger)}
+.btn:active{filter:brightness(.92)}
+.btn.soft{background:var(--raise);color:var(--ink);border:1px solid var(--line)}
+.btn[disabled]{opacity:.5;cursor:default}
+.btn.danger{background:transparent;color:var(--danger);border:1px solid rgba(255,123,138,.5)}
 
 /* Réglages */
-.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-top:8px}
-.card p{margin:0 0 10px;color:var(--ink-2);font-size:.92rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-top:8px}
+.card p{margin:0 0 12px;color:var(--ink-2);font-size:.92rem}
 .card p:last-child{margin-bottom:0}
+.card b{color:var(--ink)}
 .card .row{display:flex;flex-wrap:wrap;gap:8px}
-.orow{display:flex;align-items:center;gap:6px;padding:4px 4px 4px 14px;min-height:50px}
-.orow .nm{flex:1;font-weight:600}
+.orow{display:flex;align-items:center;gap:6px;padding:4px 4px 4px 16px;min-height:52px}
+.orow .nm{flex:1;font-weight:500}
 .arrow{width:44px;height:44px;display:grid;place-items:center;border-radius:50%;color:var(--ink)}
 .arrow svg{width:18px;height:18px}
 .arrow[disabled]{opacity:.25;cursor:default}
-.arrow:not([disabled]):active{background:var(--line)}
-
-.code{font-size:1.7rem;font-weight:800;letter-spacing:.06em;font-variant-numeric:tabular-nums;padding:6px 0 10px;user-select:all}
-.field{width:100%;height:46px;padding:0 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);font-size:1rem}
-.field:focus{outline:none;border-color:var(--ink)}
+.arrow:not([disabled]):active{background:var(--raise)}
+.code{
+  font-size:1.8rem;font-weight:700;letter-spacing:.07em;color:var(--accent);
+  font-variant-numeric:tabular-nums;padding:2px 0 12px;user-select:all;
+}
+.field{
+  width:100%;height:46px;padding:0 14px;border-radius:12px;
+  border:1px solid var(--line);background:var(--raise);color:var(--ink);font-size:1rem;
+}
+.field:focus{outline:none;border-color:var(--accent)}
 .join{display:flex;gap:8px}
 .join .field{flex:1;min-width:0;text-transform:uppercase;letter-spacing:.05em}
 
 /* Zone d’ajout */
 .dock{
   flex:none;
-  background:var(--card);
+  background:rgba(17,26,44,.88);
+  -webkit-backdrop-filter:blur(18px);
+  backdrop-filter:blur(18px);
   border-top:1px solid var(--line);
+  border-radius:22px 22px 0 0;
   padding-bottom:env(safe-area-inset-bottom,0px);
 }
-#typing{padding:10px 12px 0;display:flex;flex-direction:column;gap:8px}
+#typing{padding:12px 14px 0;display:flex;flex-direction:column;gap:8px}
 #chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}
 #chips::-webkit-scrollbar{display:none}
 .chip{
-  flex:none;padding:8px 14px;border-radius:99px;
-  background:var(--paper);border:1px solid var(--line);font-weight:600;font-size:.92rem;
+  flex:none;padding:8px 14px;border-radius:12px;
+  background:var(--raise);border:1px solid var(--line);font-weight:500;font-size:.92rem;
 }
+.chip:active{border-color:var(--accent)}
 .pick{display:flex;align-items:center;gap:8px;color:var(--ink-2);font-size:.88rem}
 .pick select{
   flex:1;min-width:0;padding:8px 10px;border-radius:10px;
-  background:var(--paper);border:1px solid var(--line);color:var(--ink);
+  background:var(--raise);border:1px solid var(--line);color:var(--ink);
 }
-#addform{display:flex;gap:8px;padding:10px 12px;align-items:center}
+#addform{display:flex;gap:8px;padding:12px 14px;align-items:center}
 #in{
-  flex:1;min-width:0;height:48px;padding:0 16px;border-radius:99px;
-  background:var(--paper);border:1.5px solid var(--line);color:var(--ink);font-size:1rem;
+  flex:1;min-width:0;height:48px;padding:0 16px;border-radius:16px;
+  background:var(--raise);border:1px solid var(--line);color:var(--ink);font-size:1rem;
 }
 #in::placeholder{color:var(--ink-2)}
-#in:focus{outline:none;border-color:var(--ink)}
+#in:focus{outline:none;border-color:var(--accent)}
 .round{
-  flex:none;width:48px;height:48px;border-radius:50%;display:grid;place-items:center;
-  border:1.5px solid var(--line);background:var(--paper);
+  flex:none;width:48px;height:48px;border-radius:16px;display:grid;place-items:center;
+  border:1px solid var(--line);background:var(--raise);
 }
 .round svg{width:22px;height:22px}
-.round.on{background:var(--mark);color:var(--mark-ink);border-color:var(--mark)}
-.round.primary{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.round.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.round.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 
 /* Onglets */
-.tabs{display:flex;border-top:1px solid var(--line)}
+.tabs{display:flex}
 .tabs button{
-  flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
-  padding:8px 4px 8px;color:var(--ink-2);font-size:.78rem;font-weight:600;min-height:56px;justify-content:center;
+  position:relative;
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:10px 4px 8px;color:var(--ink-2);font-size:.76rem;font-weight:500;min-height:58px;justify-content:center;
 }
-.tabs button svg{width:24px;height:24px}
-.tabs button[aria-current="page"]{color:var(--ink)}
-.tabs button[aria-current="page"] svg{stroke-width:2.4}
+.tabs button svg{width:23px;height:23px}
+.tabs button[aria-current="page"]{color:var(--accent)}
+.tabs button[aria-current="page"]::before{
+  content:"";position:absolute;top:0;left:50%;width:28px;height:3px;margin-left:-14px;
+  border-radius:0 0 3px 3px;background:var(--accent);
+}
 
 /* Message */
 #toast{
-  position:absolute;left:12px;right:12px;bottom:calc(var(--dock-h,150px) + 10px);
-  background:var(--ink);color:var(--paper);
-  border-radius:12px;padding:12px 14px;
+  position:absolute;left:14px;right:14px;bottom:calc(var(--dock-h,150px) + 12px);
+  background:var(--raise);color:var(--ink);border:1px solid var(--line);
+  box-shadow:0 12px 32px rgba(0,0,0,.5);
+  border-radius:14px;padding:12px 16px;
   display:flex;align-items:center;gap:12px;justify-content:space-between;
   opacity:0;transform:translateY(6px);pointer-events:none;
   transition:opacity .18s ease,transform .18s ease;z-index:5;
   font-size:.95rem;
 }
 #toast.show{opacity:1;transform:none;pointer-events:auto}
-#toast button{font-weight:800;color:var(--mark);padding:4px 6px}
+#toast button{font-weight:700;color:var(--accent);padding:4px 6px}
+
+.crumb{display:flex;align-items:center;gap:8px;min-height:30px;margin-bottom:4px}
+.back{display:inline-flex;align-items:center;gap:2px;color:var(--accent);font-weight:600;font-size:.95rem;padding:4px 8px 4px 0}
+.back svg{width:18px;height:18px}
+.crumb-f{color:var(--ink-2);font-size:.9rem;overflow-wrap:anywhere}
+.crumb-f::before{content:"/";margin-right:8px;opacity:.6}
+.top h1{overflow-wrap:anywhere}
+.actions{display:flex;gap:8px;margin:10px 0 2px}
+.actions .btn{flex:1;min-height:46px;padding-left:10px;padding-right:10px;white-space:nowrap}
+.fh{display:flex;align-items:center;gap:2px;margin:20px 0 8px}
+.fh-main{flex:1;display:flex;align-items:center;gap:8px;min-width:0;text-align:left;padding:8px 6px;font-weight:600;font-size:1.04rem}
+.fh-main .fn{overflow-wrap:anywhere}
+.fh-main .chev{display:grid;place-items:center;color:var(--ink-2)}
+.fh-main .chev svg{width:18px;height:18px}
+.fh .rm{opacity:1}
+.lrow{display:flex;align-items:center}
+.lrow-main{flex:1;display:flex;align-items:center;gap:12px;text-align:left;padding:10px 4px 10px 16px;min-height:66px;min-width:0}
+.ltxt{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.lname{font-weight:600;font-size:1.05rem;overflow-wrap:anywhere}
+.lmeta{color:var(--ink-2);font-size:.85rem}
+.lmeta.has{color:var(--accent)}
+.lchev{display:grid;place-items:center;color:var(--ink-2)}
+.lchev svg{width:18px;height:18px}
+.nolist{padding:16px;color:var(--ink-2);font-size:.9rem}
+#sheet{position:absolute;inset:0;z-index:20}
+.sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.6)}
+.sheet{
+  position:absolute;left:0;right:0;bottom:0;
+  background:var(--card);border-top:1px solid var(--line);border-radius:22px 22px 0 0;
+  padding:22px 20px calc(env(safe-area-inset-bottom,0px) + 20px);
+  display:flex;flex-direction:column;gap:14px;
+  animation:rise .22s ease-out;
+}
+@keyframes rise{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
+.sheet h3{margin:0;font-family:var(--serif);font-size:1.45rem;font-weight:600}
+.lbl{display:flex;flex-direction:column;gap:6px;color:var(--ink-2);font-size:.88rem}
+.sheet .row{display:flex;gap:8px}
+.sheet .row .btn{flex:1;min-height:46px}
+.sheet .btn.danger{min-height:46px}
+
+
+:root{--c-courses:#5B93FF;--c-voyage:#3DD6C6;--c-autre:#B79CFF}
+.sheet{max-height:92%;overflow-y:auto}
+.btn.soft[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.sumcard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-top:12px}
+.sumtop{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.sumlabel{color:var(--ink-2);font-size:.9rem}
+.sumval{font-family:var(--serif);font-size:2rem;font-weight:600;letter-spacing:-0.01em}
+.bar{display:flex;gap:3px;height:10px;margin:14px 0 12px;border-radius:5px;overflow:hidden}
+.bar i{display:block;min-width:6px;border-radius:3px}
+.legend{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.legend li{display:flex;align-items:center;gap:10px;font-size:.92rem}
+.legend li b{margin-left:auto;font-weight:600}
+.dot{flex:none;width:9px;height:9px;border-radius:50%}
+.cat-Courses{background:var(--c-courses)}
+.cat-Voyage{background:var(--c-voyage)}
+.cat-Autre{background:var(--c-autre)}
+.cats{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:18px 0 2px;padding-bottom:2px}
+.cats::-webkit-scrollbar{display:none}
+.cats button{flex:none;padding:8px 14px;border-radius:99px;background:var(--card);border:1px solid var(--line);font-weight:500;font-size:.9rem;color:var(--ink-2)}
+.cats button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.balrow{display:flex;align-items:center;gap:10px;padding:13px 16px}
+.balrow .nm{flex:1;font-weight:600}
+.balrow .st{font-size:.92rem;color:var(--ink-2)}
+.balrow .st.pos{color:var(--accent);font-weight:600}
+.balrow .st.neg{color:var(--danger);font-weight:600}
+.setrow{display:flex;align-items:center;gap:10px;padding:12px 10px 12px 16px}
+.setrow .tx{flex:1;min-width:0;font-size:.95rem;color:var(--ink-2)}
+.setrow .tx b{color:var(--ink);font-weight:600}
+.exday{margin:20px 6px 8px;font-size:.88rem;font-weight:600;color:var(--ink-2)}
+.exmain{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 16px;min-height:64px}
+.extxt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.extitle{font-weight:600;font-size:1.02rem;overflow-wrap:anywhere}
+.exmeta{color:var(--ink-2);font-size:.84rem}
+.exright{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.examt{font-weight:700;font-variant-numeric:tabular-nums}
+.extag{display:inline-flex;align-items:center;gap:6px;font-size:.76rem;color:var(--ink-2)}
+.seg{display:flex;gap:6px}
+.seg button{flex:1;padding:11px 6px;border-radius:12px;background:var(--raise);border:1px solid var(--line);font-weight:600;font-size:.92rem;color:var(--ink-2)}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.chipset{display:flex;flex-wrap:wrap;gap:8px}
+.chipset button{padding:9px 14px;border-radius:99px;background:var(--raise);border:1px solid var(--line);font-weight:500;color:var(--ink-2)}
+.chipset button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+input[type="date"].field{min-height:46px;color-scheme:dark}
 
 @media (prefers-reduced-motion: reduce){
   *{transition:none !important;animation:none !important}
@@ -297,6 +399,7 @@ ul.list > li:first-child{border-top:0}
   <header class="top" id="top"></header>
   <main id="main" tabindex="-1"></main>
   <div id="toast" role="status" aria-live="polite" hidden></div>
+  <div id="sheet" role="dialog" aria-modal="true" hidden></div>
   <div class="dock" id="dock">
     <div id="addzone">
       <div id="typing" hidden>
@@ -310,7 +413,8 @@ ul.list > li:first-child{border-top:0}
       </form>
     </div>
     <nav class="tabs" aria-label="Navigation principale">
-      <button type="button" data-tab="list" id="tab-list"></button>
+      <button type="button" data-tab="lists" id="tab-lists"></button>
+      <button type="button" data-tab="expenses" id="tab-expenses"></button>
       <button type="button" data-tab="history" id="tab-history"></button>
       <button type="button" data-tab="settings" id="tab-settings"></button>
     </nav>
@@ -355,6 +459,12 @@ const ICON = {
   list:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>',
   clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
   gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  wallet:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10.5h18M7 15h3"/></svg>',
+  folder:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+  chevR:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
+  chevD:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+  back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>',
+  pencil:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
   up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>',
   down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>'
 };
@@ -380,12 +490,43 @@ function everyText(avg){
 }
 
 /* ---------- État et stockage ---------- */
+const CATS = ['Courses','Voyage','Autre'];
+const eur = c => (c / 100).toLocaleString('fr-FR', { style:'currency', currency:'EUR' });
+function todayStr(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function parseAmount(v){
+  const n = parseFloat(String(v).replace(/\s/g,'').replace(',','.'));
+  return Number.isFinite(n) && n > 0 && n < 1000000 ? Math.round(n * 100) : 0;
+}
+function splitCents(amt, ids){
+  const list = [...ids].sort();
+  const n = list.length || 1;
+  const base = Math.floor(amt / n), rem = amt - base * n;
+  return list.map((id,i) => [id, base + (i < rem ? 1 : 0)]);
+}
+function normExpense(e){
+  return { id:String(e.id), title:String(e.title || '').slice(0,60), amt:Math.max(0, Math.round(Number(e.amt) || 0)),
+    cat:CATS.includes(e.cat) ? e.cat : 'Autre', payerId:String(e.payerId || ''),
+    shares:Array.isArray(e.shares) ? e.shares.map(String) : [], type:e.type === 'transfer' ? 'transfer' : 'expense',
+    toId:String(e.toId || ''), date:/^\d{4}-\d{2}-\d{2}$/.test(e.date) ? e.date : todayStr(), ts:Number(e.ts) || 0, by:String(e.by || '').slice(0,20) };
+}
 function normalizeState(s){
-  const o = { items:[], history:{}, dismissed:{}, order:RAYONS.slice(), share:null, me:'' };
+  const o = { items:[], history:{}, dismissed:{}, order:RAYONS.slice(), share:null, me:'', folders:[], lists:[], cur:'main', collapsed:{}, people:[], expenses:[], meId:'', expCat:'all' };
   if (s && typeof s === 'object'){
+    if (Array.isArray(s.folders)) o.folders = s.folders.filter(f => f && f.id && f.name).map(f => ({ id:String(f.id), name:String(f.name).slice(0,40), ts:Number(f.ts) || 0 }));
+    if (Array.isArray(s.lists)) o.lists = s.lists.filter(l => l && l.id && l.name).map(l => ({
+      id:String(l.id), name:String(l.name).slice(0,40),
+      folderId:(l.folderId && o.folders.some(f => f.id === l.folderId)) ? String(l.folderId) : null, ts:Number(l.ts) || 0 }));
+    if (!o.lists.length) o.lists = [{ id:'main', name:'Courses', folderId:null, ts:0 }];
+    o.cur = o.lists.some(l => l.id === s.cur) ? s.cur : o.lists[0].id;
+    if (s.collapsed && typeof s.collapsed === 'object') o.collapsed = s.collapsed;
+    if (Array.isArray(s.people)) o.people = s.people.filter(p => p && p.id && p.name).map(p => ({ id:String(p.id), name:String(p.name).slice(0,30), ts:Number(p.ts) || 0 }));
+    if (Array.isArray(s.expenses)) o.expenses = s.expenses.filter(e => e && e.id).map(normExpense);
+    if (typeof s.meId === 'string' && o.people.some(p => p.id === s.meId)) o.meId = s.meId;
+    if (s.expCat === 'all' || CATS.includes(s.expCat)) o.expCat = s.expCat;
     if (Array.isArray(s.items)){
       o.items = s.items.filter(i => i && i.name && i.id).map(i => ({
         id:String(i.id), name:String(i.name), key:norm(i.name),
+        listId:o.lists.some(l => l.id === i.listId) ? i.listId : o.lists[0].id,
         rayon:RAYONS.includes(i.rayon) ? i.rayon : 'Autre',
         qty:Math.max(1, parseInt(i.qty,10) || 1),
         done:!!i.done, doneTs:i.doneTs || null, ts:Number(i.ts) || 0, by:String(i.by || '').slice(0,20)
@@ -406,6 +547,8 @@ function normalizeState(s){
       RAYONS.forEach(r => { if (!ord.includes(r)) ord.push(r); });
       o.order = ord;
     }
+  } else {
+    o.lists = [{ id:'main', name:'Courses', folderId:null, ts:0 }];
   }
   return o;
 }
@@ -474,14 +617,14 @@ function addItem(name, rayon, qty){
   if (!name) return false;
   const key = norm(name);
   qty = qty || 1;
-  const ex = state.items.find(i => i.key === key && !i.done);
+  const ex = state.items.find(i => i.key === key && !i.done && i.listId === state.cur);
   if (ex){
     ex.qty += qty;
     lastAdded = ex.id;
     pushItem(ex);
     toast(ex.name + ' : quantité portée à ' + ex.qty);
   } else {
-    const it = { id:uid(), name:(state.history[key] ? state.history[key].name : name), key, rayon:rayon || guessRayon(name), qty, done:false, doneTs:null, ts:Date.now(), by:state.me || '' };
+    const it = { id:uid(), name:(state.history[key] ? state.history[key].name : name), key, rayon:rayon || guessRayon(name), qty, done:false, doneTs:null, ts:Date.now(), by:state.me || '', listId:state.cur };
     state.items.push(it);
     lastAdded = it.id;
     pushItem(it);
@@ -525,21 +668,37 @@ function removeItem(id){
 }
 
 /* ---------- Affichage ---------- */
+const curList = () => state.lists.find(l => l.id === state.cur) || state.lists[0];
+const curItems = () => state.items.filter(i => i.listId === state.cur);
+function pillHtml(){
+  const st = shareStatus();
+  return st ? '<span class="pill ' + st.k + '">' + esc(st.t) + '</span>' : '';
+}
 function renderHeader(){
   const top = $('#top');
   if (tab === 'list'){
-    const open = state.items.filter(i => !i.done).length;
-    const done = state.items.length - open;
+    const mine = curItems();
+    const open = mine.filter(i => !i.done).length;
+    const done = mine.length - open;
+    const L = curList();
+    const F = L && L.folderId ? state.folders.find(f => f.id === L.folderId) : null;
     let sub = open ? open + ' ' + plural(open,'article','articles') + ' à acheter' : 'Rien à acheter pour le moment';
     if (done) sub += ', ' + done + ' dans le caddie';
-    const pct = state.items.length ? Math.round(done / state.items.length * 100) : 0;
-    const st = shareStatus();
-    top.innerHTML = '<div class="hd"><h1>Caddie</h1>' + (st ? '<span class="pill ' + st.k + '">' + esc(st.t) + '</span>' : '') + '</div><p class="sub">' + esc(sub) + '</p>' +
-      (state.items.length ? '<div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><i style="width:' + pct + '%"></i></div>' : '');
+    const pct = mine.length ? Math.round(done / mine.length * 100) : 0;
+    top.innerHTML = '<div class="crumb"><button type="button" class="back" data-act="back" aria-label="Retour à toutes les listes">' + ICON.back + '<span>Listes</span></button>' + (F ? '<span class="crumb-f">' + esc(F.name) + '</span>' : '') + '</div>' +
+      '<div class="hd"><h1>' + esc(L ? L.name : 'Liste') + '</h1>' + pillHtml() + '</div><p class="sub">' + esc(sub) + '</p>' +
+      (mine.length ? '<div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><i style="width:' + pct + '%"></i></div>' : '');
+  } else if (tab === 'lists'){
+    const n = state.lists.length, m = state.folders.length;
+    top.innerHTML = '<div class="hd"><h1>Listes</h1>' + pillHtml() + '</div><p class="sub">' + n + ' ' + plural(n,'liste','listes') + (m ? ', ' + m + ' ' + plural(m,'dossier','dossiers') : '') + '</p>';
+  } else if (tab === 'expenses'){
+    const spent = state.expenses.filter(e => e.type === 'expense');
+    const total = spent.reduce((a,e) => a + e.amt, 0);
+    top.innerHTML = '<div class="hd"><h1>Dépenses</h1>' + pillHtml() + '</div><p class="sub">' + (spent.length ? spent.length + ' ' + plural(spent.length,'dépense','dépenses') + ', ' + eur(total) + ' au total' : 'Partagez les frais, sans prise de tête.') + '</p>';
   } else if (tab === 'history'){
     top.innerHTML = '<h1>Historique</h1><p class="sub">' + (state.share ? 'Les achats de tout le foyer, et leur rythme.' : 'Ce que vous achetez, et à quel rythme.') + '</p>';
   } else {
-    top.innerHTML = '<h1>Réglages</h1><p class="sub">' + (state.share ? 'Liste partagée entre vos appareils.' : 'Vos données restent sur cet appareil.') + '</p>';
+    top.innerHTML = '<h1>Réglages</h1><p class="sub">' + (state.share ? 'Tout est partagé entre vos appareils.' : 'Vos données restent sur cet appareil.') + '</p>';
   }
 }
 
@@ -566,12 +725,13 @@ function listHtml(){
         '<button type="button" class="sug-x" data-act="sug-dismiss" data-key="' + esc(x.key) + '" aria-label="Ignorer ' + esc(x.h.name) + ' pendant 7 jours">' + ICON.x + '</button>' +
       '</li>').join('') + '</ul></section>';
   }
-  if (!state.items.length){
+  const mine = curItems();
+  if (!mine.length){
     html += '<div class="empty"><b>Votre liste est vide</b>Écrivez un article en bas de l’écran' + (SR ? ', ou dictez-en plusieurs avec le micro' : '') + '. Cochez-les en magasin : Caddie apprendra ce qu’il vous faut et quand.</div>';
     return html;
   }
-  const open = state.items.filter(i => !i.done);
-  const done = state.items.filter(i => i.done);
+  const open = mine.filter(i => !i.done);
+  const done = mine.filter(i => i.done);
   const groups = {};
   open.forEach(i => (groups[i.rayon] = groups[i.rayon] || []).push(i));
   state.order.forEach(r => {
@@ -585,6 +745,35 @@ function listHtml(){
   return html;
 }
 
+function listRow(l){
+  const its = state.items.filter(i => i.listId === l.id);
+  const open = its.filter(i => !i.done).length;
+  const meta = open ? open + ' ' + plural(open,'article','articles') + ' à acheter' : (its.length ? 'Tout est dans le caddie' : 'Liste vide');
+  return '<li class="lrow"><button type="button" class="lrow-main" data-act="open-list" data-id="' + esc(l.id) + '">' +
+    '<span class="ltxt"><span class="lname">' + esc(l.name) + '</span><span class="lmeta' + (open ? ' has' : '') + '">' + esc(meta) + '</span></span>' +
+    '<span class="lchev">' + ICON.chevR + '</span></button>' +
+    '<button type="button" class="rm" data-act="edit-list" data-id="' + esc(l.id) + '" aria-label="Modifier la liste ' + esc(l.name) + '">' + ICON.pencil + '</button></li>';
+}
+function listsHtml(){
+  let html = '<div class="actions"><button type="button" class="btn" data-act="new-list">Nouvelle liste</button><button type="button" class="btn soft" data-act="new-folder">Nouveau dossier</button></div>';
+  const loose = state.lists.filter(l => !l.folderId);
+  if (loose.length){
+    if (state.folders.length) html += '<h2>Sans dossier</h2>'; else html += '<div style="height:10px"></div>';
+    html += '<ul class="list">' + loose.map(listRow).join('') + '</ul>';
+  }
+  state.folders.forEach(f => {
+    const ls = state.lists.filter(l => l.folderId === f.id);
+    const closed = !!state.collapsed[f.id];
+    html += '<section><div class="fh"><button type="button" class="fh-main" data-act="toggle-folder" data-id="' + esc(f.id) + '" aria-expanded="' + !closed + '">' +
+      '<span class="chev">' + (closed ? ICON.chevR : ICON.chevD) + '</span><span class="fn">' + esc(f.name) + '</span><span class="n" style="font-weight:600;font-size:.75rem;background:var(--raise);color:var(--ink-2);border-radius:99px;padding:1px 8px">' + ls.length + '</span></button>' +
+      '<button type="button" class="rm" data-act="new-list" data-folder="' + esc(f.id) + '" aria-label="Ajouter une liste dans ' + esc(f.name) + '">' + ICON.plus + '</button>' +
+      '<button type="button" class="rm" data-act="edit-folder" data-id="' + esc(f.id) + '" aria-label="Modifier le dossier ' + esc(f.name) + '">' + ICON.pencil + '</button></div>';
+    if (!closed) html += ls.length ? '<ul class="list">' + ls.map(listRow).join('') + '</ul>' : '<div class="empty" style="margin:0;padding:14px">Aucune liste dans ce dossier.</div>';
+    html += '</section>';
+  });
+  return html;
+}
+
 function historyHtml(){
   const rows = Object.entries(state.history).filter(([k,h]) => h.dates.length).map(([k,h]) => ({ k, h, s:stats(h), last:Math.max(...h.dates) }))
     .sort((a,b) => b.last - a.last);
@@ -593,7 +782,7 @@ function historyHtml(){
       (state.share ? '' : '<br><button type="button" class="btn" style="margin-top:14px" data-act="demo">Charger un exemple pour essayer</button>') + '</div>';
   }
   return '<ul class="list" style="margin-top:8px">' + rows.map(({k,h,s,last}) => {
-    const onList = state.items.some(i => i.key === k && !i.done);
+    const onList = state.items.some(i => i.key === k && !i.done && i.listId === state.cur);
     const n = h.dates.length;
     let line = 'Acheté ' + n + ' ' + plural(n,'fois','fois') + (s ? ', en général ' + everyText(s.avg) : '') + '. Dernier achat : ' + agoText((Date.now() - last) / DAY) + '.';
     return '<li class="hrow"><div class="txt"><div class="t">' + esc(h.name) + '</div><div class="r">' + esc(h.rayon) + '</div><div class="d">' + esc(line) + '</div></div>' +
@@ -640,13 +829,13 @@ function render(){
   const main = $('#main');
   const scroll = main.scrollTop;
   renderHeader();
-  main.innerHTML = tab === 'list' ? listHtml() : tab === 'history' ? historyHtml() : settingsHtml();
+  main.innerHTML = tab === 'list' ? listHtml() : tab === 'lists' ? listsHtml() : tab === 'expenses' ? expensesHtml() : tab === 'history' ? historyHtml() : settingsHtml();
   main.scrollTop = scroll;
   $('#addzone').hidden = tab !== 'list';
-  [['list','Liste',ICON.list],['history','Historique',ICON.clock],['settings','Réglages',ICON.gear]].forEach(([id,label,ic]) => {
+  [['lists','Listes',ICON.folder],['expenses','Dépenses',ICON.wallet],['history','Historique',ICON.clock],['settings','Réglages',ICON.gear]].forEach(([id,label,ic]) => {
     const b = $('#tab-' + id);
     b.innerHTML = ic + '<span>' + label + '</span>';
-    if (id === tab) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
+    if (id === tab || (id === 'lists' && tab === 'list')) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
   });
   updateTyping();
   if (lastAdded){
@@ -667,7 +856,7 @@ function candidates(){
   const m = new Map();
   Object.entries(state.history).forEach(([k,h]) => m.set(k, { key:k, name:h.name, rayon:h.rayon }));
   COMMON.forEach(n => { const k = norm(n); if (!m.has(k)) m.set(k, { key:k, name:n, rayon:guessRayon(n) }); });
-  return [...m.values()].filter(c => !state.items.some(i => i.key === c.key && !i.done));
+  return [...m.values()].filter(c => !state.items.some(i => i.key === c.key && !i.done && i.listId === state.cur));
 }
 function updateTyping(){
   const v = input.value.trim();
@@ -839,9 +1028,18 @@ const colref = name => fb.fs.collection(fb.db, 'households', state.share.code, n
 function onErr(e){ net.error = (e && e.code) || 'erreur'; renderHeader(); }
 
 function itemData(it){
-  return { name:it.name, key:it.key, rayon:it.rayon, qty:it.qty, done:!!it.done, doneTs:it.doneTs || null, ts:it.ts || Date.now(), by:it.by || '' };
+  return { name:it.name, key:it.key, listId:it.listId || 'main', rayon:it.rayon, qty:it.qty, done:!!it.done, doneTs:it.doneTs || null, ts:it.ts || Date.now(), by:it.by || '' };
 }
 function pushItem(it){ if (syncing()) fb.fs.setDoc(dref('items', it.id), itemData(it)).catch(onErr); }
+function pushList(l){ if (syncing()) fb.fs.setDoc(dref('lists', l.id), { name:l.name, folderId:l.folderId || '', ts:l.ts || Date.now() }).catch(onErr); }
+function delList(id){ if (syncing()) fb.fs.deleteDoc(dref('lists', id)).catch(onErr); }
+function pushFolder(f){ if (syncing()) fb.fs.setDoc(dref('folders', f.id), { name:f.name, ts:f.ts || Date.now() }).catch(onErr); }
+function delFolder(id){ if (syncing()) fb.fs.deleteDoc(dref('folders', id)).catch(onErr); }
+function pushPerson(p){ if (syncing()) fb.fs.setDoc(dref('people', p.id), { name:p.name, ts:p.ts || Date.now() }).catch(onErr); }
+function delPerson(id){ if (syncing()) fb.fs.deleteDoc(dref('people', id)).catch(onErr); }
+function expData(e){ return { title:e.title, amt:e.amt, cat:e.cat, payerId:e.payerId, shares:e.shares, type:e.type, toId:e.toId || '', date:e.date, ts:e.ts || Date.now(), by:e.by || '' }; }
+function pushExpense(e){ if (syncing()) fb.fs.setDoc(dref('expenses', e.id), expData(e)).catch(onErr); }
+function delExpense(id){ if (syncing()) fb.fs.deleteDoc(dref('expenses', id)).catch(onErr); }
 function delItem(id){ if (syncing()) fb.fs.deleteDoc(dref('items', id)).catch(onErr); }
 function pushHistDate(it, ts, add){
   if (!syncing()) return;
@@ -853,6 +1051,10 @@ function pushHistFull(k, h){
 function delHist(k){ if (syncing()) fb.fs.deleteDoc(dref('history', hid(k))).catch(onErr); }
 async function pushAll(){
   const ops = [];
+  state.folders.forEach(f => ops.push([dref('folders', f.id), { name:f.name, ts:f.ts || Date.now() }]));
+  state.lists.forEach(l => ops.push([dref('lists', l.id), { name:l.name, folderId:l.folderId || '', ts:l.ts || Date.now() }]));
+  state.people.forEach(p => ops.push([dref('people', p.id), { name:p.name, ts:p.ts || Date.now() }]));
+  state.expenses.forEach(e => ops.push([dref('expenses', e.id), expData(e)]));
   state.items.forEach(it => ops.push([dref('items', it.id), itemData(it)]));
   Object.entries(state.history).forEach(([k,h]) => ops.push([dref('history', hid(k)), { name:h.name, key:k, rayon:h.rayon, dates:h.dates }]));
   for (let i = 0; i < ops.length; i += 400){
@@ -891,9 +1093,39 @@ async function startSync(){
     if (!state.share || state.share.code !== code) return;
     state.items = snap.docs.map(d => {
       const x = d.data();
-      return { id:d.id, name:String(x.name || ''), key:norm(x.name || ''), rayon:RAYONS.includes(x.rayon) ? x.rayon : 'Autre',
+      return { id:d.id, name:String(x.name || ''), key:norm(x.name || ''), listId:String(x.listId || 'main'), rayon:RAYONS.includes(x.rayon) ? x.rayon : 'Autre',
         qty:Math.max(1, parseInt(x.qty, 10) || 1), done:!!x.done, doneTs:x.doneTs || null, ts:Number(x.ts) || 0, by:String(x.by || '') };
     }).filter(i => i.name).sort((a,b) => a.ts - b.ts);
+    afterRemote(snap);
+  }, onErr));
+  unsubs.push(fb.fs.onSnapshot(colref('lists'), snap => {
+    if (!state.share || state.share.code !== code) return;
+    const arr = snap.docs.map(d => { const x = d.data(); return { id:d.id, name:String(x.name || 'Liste').slice(0,40), folderId:x.folderId || null, ts:Number(x.ts) || 0 }; })
+      .sort((a,b) => a.ts - b.ts);
+    if (arr.length){ state.lists = arr; }
+    else if (!snap.metadata.fromCache){ state.lists.forEach(pushList); }
+    if (!state.lists.some(l => l.id === state.cur)){ state.cur = state.lists[0].id; if (tab === 'list') tab = 'lists'; }
+    afterRemote(snap);
+  }, onErr));
+  unsubs.push(fb.fs.onSnapshot(colref('people'), snap => {
+    if (!state.share || state.share.code !== code) return;
+    const arr = snap.docs.map(d => { const x = d.data(); return { id:d.id, name:String(x.name || '').slice(0,30), ts:Number(x.ts) || 0 }; })
+      .filter(p => p.name).sort((a,b) => a.ts - b.ts);
+    if (arr.length || !snap.metadata.fromCache) state.people = arr;
+    if (state.meId && !state.people.some(p => p.id === state.meId)) state.meId = '';
+    afterRemote(snap);
+  }, onErr));
+  unsubs.push(fb.fs.onSnapshot(colref('expenses'), snap => {
+    if (!state.share || state.share.code !== code) return;
+    const arr = snap.docs.map(d => normExpense({ id:d.id, ...d.data() })).sort((a,b) => a.ts - b.ts);
+    if (arr.length || !snap.metadata.fromCache) state.expenses = arr;
+    afterRemote(snap);
+  }, onErr));
+  unsubs.push(fb.fs.onSnapshot(colref('folders'), snap => {
+    if (!state.share || state.share.code !== code) return;
+    const arr = snap.docs.map(d => { const x = d.data(); return { id:d.id, name:String(x.name || 'Dossier').slice(0,40), ts:Number(x.ts) || 0 }; })
+      .sort((a,b) => a.ts - b.ts);
+    if (arr.length || !snap.metadata.fromCache) state.folders = arr;
     afterRemote(snap);
   }, onErr));
   unsubs.push(fb.fs.onSnapshot(colref('history'), snap => {
@@ -949,6 +1181,8 @@ async function joinHousehold(raw){
   stopSync();
   state.share = { code };
   state.items = []; state.history = {};
+  state.folders = []; state.lists = [{ id:'main', name:'Courses', folderId:null, ts:0 }]; state.cur = 'main'; state.collapsed = {};
+  state.people = []; state.expenses = []; state.meId = '';
   save();
   await startSync();
   render();
@@ -979,6 +1213,233 @@ async function shareInvite(){
 window.addEventListener('online', () => renderHeader());
 window.addEventListener('offline', () => renderHeader());
 
+/* ---------- Dossiers et listes ---------- */
+let sheetCfg = null;
+function closeSheet(){ const el = $('#sheet'); el.hidden = true; el.innerHTML = ''; sheetCfg = null; }
+function openSheet(cfg){
+  const el = $('#sheet');
+  const opts = ['<option value="">Aucun dossier</option>'].concat(state.folders.map(f =>
+    '<option value="' + esc(f.id) + '"' + (f.id === cfg.folderId ? ' selected' : '') + '>' + esc(f.name) + '</option>')).join('');
+  el.innerHTML = '<div class="sheet-bg" data-act="sheet-close"></div><form class="sheet" id="sheetform" autocomplete="off"><h3>' + esc(cfg.title) + '</h3>' +
+    '<label class="lbl">Nom<input id="sheetname" class="field" type="text" maxlength="40" value="' + esc(cfg.name || '') + '" placeholder="' + esc(cfg.placeholder || '') + '"></label>' +
+    (cfg.withFolder ? '<label class="lbl">Dossier<select id="sheetfolder" class="field">' + opts + '</select></label>' : '') +
+    '<div class="row"><button type="submit" class="btn">' + esc(cfg.saveLabel || 'Enregistrer') + '</button><button type="button" class="btn soft" data-act="sheet-close">Annuler</button></div>' +
+    (cfg.onDelete ? '<button type="button" class="btn danger" data-act="sheet-delete">' + esc(cfg.deleteLabel || 'Supprimer') + '</button>' : '') + '</form>';
+  el.hidden = false;
+  sheetCfg = cfg;
+  $('#sheetform').addEventListener('submit', e => {
+    e.preventDefault();
+    const name = cap($('#sheetname').value.trim());
+    if (!name){ $('#sheetname').focus(); return; }
+    const fid = cfg.withFolder ? ($('#sheetfolder').value || null) : null;
+    closeSheet();
+    cfg.onSave(name, fid);
+  });
+  setTimeout(() => { const n = $('#sheetname'); if (n){ n.focus(); n.select(); } }, 60);
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && sheetCfg) closeSheet(); });
+
+function goList(id){ state.cur = id; tab = 'list'; save(); render(); $('#main').scrollTop = 0; }
+function newList(folderId){
+  openSheet({ title:'Nouvelle liste', placeholder:'Par exemple : Supermarché', withFolder:true, folderId:folderId || null, saveLabel:'Créer',
+    onSave:(name, fid) => {
+      const l = { id:uid(), name, folderId:fid, ts:Date.now() };
+      state.lists.push(l); pushList(l); goList(l.id);
+    } });
+}
+function newFolder(){
+  openSheet({ title:'Nouveau dossier', placeholder:'Par exemple : Maison', saveLabel:'Créer',
+    onSave:name => { const f = { id:uid(), name, ts:Date.now() }; state.folders.push(f); pushFolder(f); save(); render(); toast('Dossier « ' + name + ' » créé'); } });
+}
+function editList(id){
+  const l = state.lists.find(x => x.id === id); if (!l) return;
+  openSheet({ title:'Modifier la liste', name:l.name, withFolder:true, folderId:l.folderId,
+    onSave:(name, fid) => { l.name = name; l.folderId = fid; pushList(l); save(); render(); },
+    onDelete:() => deleteList(id), deleteLabel:'Supprimer la liste' });
+}
+function editFolder(id){
+  const f = state.folders.find(x => x.id === id); if (!f) return;
+  openSheet({ title:'Modifier le dossier', name:f.name,
+    onSave:name => { f.name = name; pushFolder(f); save(); render(); },
+    onDelete:() => deleteFolder(id), deleteLabel:'Supprimer le dossier' });
+}
+function deleteList(id){
+  const l = state.lists.find(x => x.id === id); if (!l) return;
+  if (state.lists.length <= 1){ closeSheet(); toast('Gardez au moins une liste.'); return; }
+  const its = state.items.filter(i => i.listId === id);
+  if (!confirm('Supprimer la liste « ' + l.name + ' »' + (its.length ? ' et ses ' + its.length + ' ' + plural(its.length,'article','articles') : '') + ' ?')) return;
+  closeSheet();
+  its.forEach(i => delItem(i.id));
+  state.items = state.items.filter(i => i.listId !== id);
+  state.lists = state.lists.filter(x => x.id !== id);
+  delList(id);
+  if (state.cur === id) state.cur = state.lists[0].id;
+  if (tab === 'list') tab = 'lists';
+  save(); render(); toast('Liste supprimée');
+}
+function deleteFolder(id){
+  const f = state.folders.find(x => x.id === id); if (!f) return;
+  const ls = state.lists.filter(l => l.folderId === id);
+  if (!confirm('Supprimer le dossier « ' + f.name + ' » ?' + (ls.length ? ' Ses ' + ls.length + ' ' + plural(ls.length,'liste','listes') + ' seront conservées, sans dossier.' : ''))) return;
+  closeSheet();
+  ls.forEach(l => { l.folderId = null; pushList(l); });
+  state.folders = state.folders.filter(x => x.id !== id);
+  delFolder(id);
+  save(); render(); toast('Dossier supprimé');
+}
+
+/* ---------- Dépenses ---------- */
+const personName = id => { const p = state.people.find(x => x.id === id); return p ? p.name : 'Ancien membre'; };
+function balances(){
+  const b = {};
+  state.people.forEach(p => b[p.id] = 0);
+  state.expenses.forEach(e => {
+    if (!(e.payerId in b)) b[e.payerId] = 0;
+    if (e.type === 'transfer'){
+      b[e.payerId] += e.amt;
+      if (!(e.toId in b)) b[e.toId] = 0;
+      b[e.toId] -= e.amt;
+    } else if (e.shares.length){
+      b[e.payerId] += e.amt;
+      splitCents(e.amt, e.shares).forEach(([id,v]) => { if (!(id in b)) b[id] = 0; b[id] -= v; });
+    }
+  });
+  return b;
+}
+function settlements(b){
+  const cr = [], de = [];
+  state.people.forEach(p => { const v = b[p.id] || 0; if (v > 0) cr.push([p.id, v]); else if (v < 0) de.push([p.id, -v]); });
+  cr.sort((a,c) => c[1] - a[1]); de.sort((a,c) => c[1] - a[1]);
+  const out = [];
+  let i = 0, j = 0;
+  while (i < de.length && j < cr.length){
+    const m = Math.min(de[i][1], cr[j][1]);
+    if (m > 0) out.push({ from:de[i][0], to:cr[j][0], amt:m });
+    de[i][1] -= m; cr[j][1] -= m;
+    if (de[i][1] === 0) i++;
+    if (cr[j][1] === 0) j++;
+  }
+  return out;
+}
+function dayLabel(str){
+  const t = todayStr();
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  const ys = y.getFullYear() + '-' + String(y.getMonth()+1).padStart(2,'0') + '-' + String(y.getDate()).padStart(2,'0');
+  if (str === t) return 'Aujourd’hui';
+  if (str === ys) return 'Hier';
+  return cap(new Date(str + 'T12:00:00').toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long' }));
+}
+function expensesHtml(){
+  let h = '<div class="actions"><button type="button" class="btn" data-act="new-expense">Nouvelle dépense</button><button type="button" class="btn soft" data-act="people">Personnes</button></div>';
+  if (!state.people.length){
+    return h + '<div class="empty"><b>Qui partage les dépenses ?</b>Ajoutez les personnes du groupe, vous compris. Caddie calcule ensuite qui doit combien à qui.</div>';
+  }
+  if (!state.expenses.length){
+    return h + '<div class="empty"><b>Aucune dépense pour l’instant</b>Notez ce que chacun paie : courses, voyage, sorties. Touchez « Nouvelle dépense » pour commencer.</div>';
+  }
+  const spent = state.expenses.filter(e => e.type === 'expense');
+  const total = spent.reduce((a,e) => a + e.amt, 0);
+  const byCat = {}; CATS.forEach(c => byCat[c] = 0);
+  spent.forEach(e => byCat[e.cat] += e.amt);
+  if (total > 0){
+    h += '<div class="sumcard"><div class="sumtop"><span class="sumlabel">Total dépensé</span><span class="sumval">' + esc(eur(total)) + '</span></div>' +
+      '<div class="bar" role="img" aria-label="Répartition par catégorie">' + CATS.filter(c => byCat[c] > 0).map(c => '<i class="cat-' + c + '" style="flex:' + byCat[c] + '"></i>').join('') + '</div>' +
+      '<ul class="legend">' + CATS.map(c => '<li><span class="dot cat-' + c + '"></span>' + c + '<b>' + esc(eur(byCat[c])) + '</b></li>').join('') + '</ul></div>';
+  }
+  const b = balances();
+  h += '<h2>Soldes</h2><ul class="list">' + state.people.map(p => {
+    const v = b[p.id] || 0;
+    const st = v > 0 ? '<span class="st pos">À recevoir ' + esc(eur(v)) + '</span>' : v < 0 ? '<span class="st neg">Doit ' + esc(eur(-v)) + '</span>' : '<span class="st">À jour</span>';
+    return '<li class="balrow"><span class="nm">' + esc(p.name) + '</span> ' + st + '</li>';
+  }).join('') + '</ul>';
+  const sets = settlements(b);
+  if (sets.length){
+    h += '<h2>Pour équilibrer</h2><ul class="list">' + sets.map(x =>
+      '<li class="setrow"><span class="tx"><b>' + esc(personName(x.from)) + '</b> doit <b>' + esc(eur(x.amt)) + '</b> à <b>' + esc(personName(x.to)) + '</b></span>' +
+      '<button type="button" class="btn soft" data-act="settle" data-from="' + esc(x.from) + '" data-to="' + esc(x.to) + '" data-amt="' + x.amt + '">Remboursé</button></li>').join('') + '</ul>';
+  }
+  h += '<h2>Dépenses</h2><div class="cats" role="group" aria-label="Filtrer par catégorie">' +
+    [['all','Toutes']].concat(CATS.map(c => [c,c])).map(([v,l]) => '<button type="button" data-act="exp-filter" data-cat="' + v + '" aria-pressed="' + (state.expCat === v) + '">' + l + '</button>').join('') + '</div>';
+  const shown = state.expenses.filter(e => state.expCat === 'all' || (e.type === 'expense' && e.cat === state.expCat))
+    .sort((a,c) => c.date.localeCompare(a.date) || c.ts - a.ts);
+  if (!shown.length) return h + '<div class="empty" style="margin-top:12px">Aucune dépense dans cette catégorie.</div>';
+  let last = '';
+  shown.forEach(e => {
+    if (e.date !== last){
+      if (last) h += '</ul>';
+      h += '<div class="exday">' + esc(dayLabel(e.date)) + '</div><ul class="list">';
+      last = e.date;
+    }
+    const isT = e.type === 'transfer';
+    const meta = isT ? personName(e.payerId) + ' a remboursé ' + personName(e.toId) : 'Payé par ' + personName(e.payerId) + ', ' + e.shares.length + ' ' + plural(e.shares.length,'personne','personnes');
+    h += '<li><button type="button" class="exmain" data-act="edit-expense" data-id="' + esc(e.id) + '"><span class="extxt"><span class="extitle">' + esc(isT ? 'Remboursement' : (e.title || e.cat)) + '</span><span class="exmeta">' + esc(meta) + '</span></span>' +
+      '<span class="exright"><span class="examt">' + esc(eur(e.amt)) + '</span>' + (isT ? '<span class="extag">Remboursement</span>' : '<span class="extag"><span class="dot cat-' + e.cat + '"></span>' + e.cat + '</span>') + '</span></button></li>';
+  });
+  return h + '</ul>';
+}
+
+function newExpenseObj(f){ return { id:uid(), ts:Date.now(), by:state.me || '', ...f }; }
+function saveExpense(e, isNew){
+  if (isNew) state.expenses.push(e);
+  pushExpense(e); save(); render();
+}
+function openExpense(opts){
+  opts = opts || {};
+  if (!state.people.length){ toast('Ajoutez d’abord les personnes qui partagent les dépenses.'); openPeople(); return; }
+  const ex = opts.expense || null;
+  const cat = ex ? ex.cat : (opts.cat || 'Courses');
+  const payer = ex ? ex.payerId : (state.people.some(p => p.id === state.meId) ? state.meId : state.people[0].id);
+  const shares = new Set(ex ? ex.shares : state.people.map(p => p.id));
+  const el = $('#sheet');
+  el.innerHTML = '<div class="sheet-bg" data-act="sheet-close"></div><form class="sheet" id="exform" autocomplete="off"><h3>' + (ex ? 'Modifier la dépense' : 'Nouvelle dépense') + '</h3>' +
+    '<label class="lbl">Titre<input id="ex-title" class="field" type="text" maxlength="60" value="' + esc(ex ? ex.title : (opts.title || '')) + '" placeholder="Par exemple : Courses du samedi"></label>' +
+    '<label class="lbl">Montant en euros<input id="ex-amount" class="field" type="text" inputmode="decimal" value="' + (ex ? (ex.amt / 100).toFixed(2).replace('.', ',') : '') + '" placeholder="0,00"></label>' +
+    '<div class="lbl">Catégorie<div class="seg" role="group">' + CATS.map(c => '<button type="button" data-act="ex-cat" data-cat="' + c + '" aria-pressed="' + (c === cat) + '">' + c + '</button>').join('') + '</div></div>' +
+    '<label class="lbl">Payé par<select id="ex-payer" class="field">' + state.people.map(p => '<option value="' + esc(p.id) + '"' + (p.id === payer ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select></label>' +
+    '<label class="lbl">Date<input id="ex-date" class="field" type="date" value="' + esc(ex ? ex.date : todayStr()) + '"></label>' +
+    '<div class="lbl">Réparti à parts égales entre<div class="chipset">' + state.people.map(p => '<button type="button" data-act="ex-share" data-id="' + esc(p.id) + '" aria-pressed="' + shares.has(p.id) + '">' + esc(p.name) + '</button>').join('') + '</div></div>' +
+    '<div class="row"><button type="submit" class="btn">Enregistrer</button><button type="button" class="btn soft" data-act="sheet-close">Annuler</button></div>' +
+    (ex ? '<button type="button" class="btn danger" data-act="sheet-delete">Supprimer la dépense</button>' : '') + '</form>';
+  el.hidden = false;
+  sheetCfg = ex ? { onDelete:() => { if (confirm('Supprimer cette dépense ?')){ closeSheet(); state.expenses = state.expenses.filter(x => x.id !== ex.id); delExpense(ex.id); save(); render(); toast('Dépense supprimée'); } } } : {};
+  $('#exform').addEventListener('submit', ev => {
+    ev.preventDefault();
+    const amt = parseAmount($('#ex-amount').value);
+    const sel = [...document.querySelectorAll('#exform [data-act="ex-share"][aria-pressed="true"]')].map(b => b.dataset.id);
+    const c = (document.querySelector('#exform [data-act="ex-cat"][aria-pressed="true"]') || {}).dataset;
+    if (!amt){ toast('Saisissez un montant supérieur à zéro.'); $('#ex-amount').focus(); return; }
+    if (!sel.length){ toast('Choisissez au moins une personne.'); return; }
+    const f = { title:cap($('#ex-title').value.trim()), amt, cat:c ? c.cat : 'Autre', payerId:$('#ex-payer').value, shares:sel, type:'expense', toId:'', date:$('#ex-date').value || todayStr() };
+    closeSheet();
+    if (ex){ Object.assign(ex, f); saveExpense(ex, false); }
+    else saveExpense(newExpenseObj(f), true);
+    toast(ex ? 'Dépense modifiée' : 'Dépense ajoutée');
+  });
+  setTimeout(() => { const n = $('#ex-title'); if (n && !ex) n.focus(); }, 60);
+}
+function openPeople(){
+  const el = $('#sheet');
+  el.innerHTML = '<div class="sheet-bg" data-act="sheet-close"></div><form class="sheet" id="peopleform" autocomplete="off"><h3>Personnes</h3>' +
+    '<div class="lbl">Qui partage les dépenses ? Touchez « Moi » à côté de votre prénom.</div>' +
+    (state.people.length ? '<ul class="list">' + state.people.map(p => '<li class="orow"><span class="nm">' + esc(p.name) + '</span>' +
+      '<button type="button" class="btn soft" data-act="person-me" data-id="' + esc(p.id) + '" aria-pressed="' + (p.id === state.meId) + '">Moi</button>' +
+      '<button type="button" class="rm" data-act="person-del" data-id="' + esc(p.id) + '" aria-label="Retirer ' + esc(p.name) + '">' + ICON.x + '</button></li>').join('') + '</ul>' : '') +
+    '<div class="join"><input id="newperson" class="field" type="text" maxlength="30" placeholder="Prénom" style="text-transform:none;letter-spacing:0"><button type="submit" class="btn">Ajouter</button></div>' +
+    '<button type="button" class="btn soft" data-act="sheet-close" style="min-height:46px">Terminer</button></form>';
+  el.hidden = false;
+  sheetCfg = {};
+  $('#peopleform').addEventListener('submit', ev => {
+    ev.preventDefault();
+    const name = cap($('#newperson').value.trim());
+    if (!name) return;
+    const pr = { id:uid(), name, ts:Date.now() };
+    state.people.push(pr); pushPerson(pr);
+    if (state.people.length === 1 && !state.meId){ state.meId = pr.id; if (!state.me) state.me = pr.name; }
+    save(); render(); openPeople();
+    setTimeout(() => { const n = $('#newperson'); if (n) n.focus(); }, 30);
+  });
+}
+
 /* ---------- Clics ---------- */
 $('#app').addEventListener('click', e => {
   const t = e.target.closest('[data-act],[data-tab]');
@@ -989,11 +1450,11 @@ $('#app').addEventListener('click', e => {
     case 'toggle': toggle(id); break;
     case 'remove': removeItem(id); break;
     case 'clear-done': {
-      const gone = state.items.filter(i => i.done);
+      const gone = curItems().filter(i => i.done);
       gone.forEach(i => delItem(i.id));
-      state.items = state.items.filter(i => !i.done);
+      state.items = state.items.filter(i => !(i.done && i.listId === state.cur));
       save(); render();
-      toast(gone.length + ' ' + plural(gone.length,'article retiré','articles retirés') + ' du caddie');
+      toast(gone.length + ' ' + plural(gone.length,'article retiré','articles retirés') + ' du caddie', 'Noter la dépense', () => openExpense({ cat:'Courses', title:curList().name }));
       break;
     }
     case 'sug-add': { const h = state.history[key]; if (h){ addItem(h.name, h.rayon, 1); render(); } break; }
@@ -1017,6 +1478,42 @@ $('#app').addEventListener('click', e => {
       save(); fillRayonSelect(); render();
       break;
     }
+    case 'new-expense': openExpense(); break;
+    case 'people': openPeople(); break;
+    case 'edit-expense': {
+      const e = state.expenses.find(x => x.id === id); if (!e) break;
+      if (e.type === 'transfer'){
+        if (confirm('Supprimer ce remboursement de ' + eur(e.amt) + ' ?')){ state.expenses = state.expenses.filter(x => x.id !== id); delExpense(id); save(); render(); toast('Remboursement supprimé'); }
+      } else openExpense({ expense:e });
+      break;
+    }
+    case 'ex-cat': t.parentNode.querySelectorAll('[data-act="ex-cat"]').forEach(b => b.setAttribute('aria-pressed', String(b === t))); break;
+    case 'ex-share': t.setAttribute('aria-pressed', String(t.getAttribute('aria-pressed') !== 'true')); break;
+    case 'exp-filter': state.expCat = t.dataset.cat; save(); render(); break;
+    case 'settle': {
+      const x = newExpenseObj({ title:'Remboursement', amt:+t.dataset.amt, cat:'Autre', payerId:t.dataset.from, shares:[], type:'transfer', toId:t.dataset.to, date:todayStr() });
+      saveExpense(x, true);
+      toast('Remboursement noté');
+      break;
+    }
+    case 'person-me': { const pr = state.people.find(x => x.id === id); if (pr){ state.meId = pr.id; state.me = pr.name; save(); openPeople(); } break; }
+    case 'person-del': {
+      const pr = state.people.find(x => x.id === id); if (!pr) break;
+      if (state.expenses.some(e => e.payerId === id || e.toId === id || e.shares.includes(id))){ toast(pr.name + ' apparaît dans des dépenses : impossible de la retirer.'); break; }
+      state.people = state.people.filter(x => x.id !== id); delPerson(id);
+      if (state.meId === id) state.meId = '';
+      save(); render(); openPeople();
+      break;
+    }
+    case 'open-list': goList(id); break;
+    case 'back': tab = 'lists'; render(); $('#main').scrollTop = 0; break;
+    case 'new-list': newList(t.dataset.folder || null); break;
+    case 'new-folder': newFolder(); break;
+    case 'edit-list': editList(id); break;
+    case 'edit-folder': editFolder(id); break;
+    case 'toggle-folder': state.collapsed[id] = !state.collapsed[id]; save(); render(); break;
+    case 'sheet-close': closeSheet(); break;
+    case 'sheet-delete': if (sheetCfg && sheetCfg.onDelete) sheetCfg.onDelete(); break;
     case 'share-create': createHousehold(); break;
     case 'share-join': joinHousehold(($('#joincode') || {}).value); break;
     case 'share-link': shareInvite(); break;
