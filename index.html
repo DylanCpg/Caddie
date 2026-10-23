@@ -1,0 +1,1073 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Caddie, liste de courses</title>
+<meta name="description" content="Une liste de courses qui apprend ce qu’il vous faut et vous le rappelle avant la panne.">
+<meta name="theme-color" content="#F4F6F1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1624" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Caddie">
+<style>
+:root{
+  color-scheme: light dark;
+  --paper:#F4F6F1;
+  --outer:#E8ECE4;
+  --card:#FFFFFF;
+  --ink:#16233B;
+  --ink-2:#566176;
+  --line:#DCE1D8;
+  --mark:#FFE14D;
+  --mark-ink:#16233B;
+  --go:#1F8A5B;
+  --go-ink:#FFFFFF;
+  --danger:#C23B3B;
+  --focus:#2563EB;
+  --radius:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --paper:#0F1624;
+    --outer:#0A101B;
+    --card:#172136;
+    --ink:#EAF0FA;
+    --ink-2:#9AA6BA;
+    --line:#26334A;
+    --mark:#F2D13A;
+    --mark-ink:#16233B;
+    --go:#3DBE8A;
+    --go-ink:#0F1624;
+    --danger:#F08080;
+    --focus:#7AA7FF;
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--outer);
+  color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  font-size:16px;
+  line-height:1.4;
+  -webkit-tap-highlight-color:transparent;
+  -webkit-text-size-adjust:100%;
+}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0;padding:0}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:8px}
+[hidden]{display:none !important}
+
+#app{
+  height:100dvh;
+  max-width:640px;
+  margin:0 auto;
+  display:flex;
+  flex-direction:column;
+  background:var(--paper);
+  position:relative;
+}
+
+/* En-tête */
+.top{
+  padding:calc(env(safe-area-inset-top,0px) + 16px) 20px 12px;
+  flex:none;
+}
+.top h1{
+  margin:0;
+  font-size:2.1rem;
+  line-height:1.05;
+  font-weight:800;
+  letter-spacing:-0.03em;
+}
+.top .sub{margin:4px 0 0;color:var(--ink-2);font-size:.95rem}
+.progress{
+  margin-top:12px;
+  height:6px;
+  border-radius:3px;
+  background:var(--line);
+  overflow:hidden;
+}
+.progress i{
+  display:block;height:100%;
+  background:var(--go);
+  border-radius:3px;
+  transition:width .25s ease;
+}
+
+.hd{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.pill{flex:none;font-size:.8rem;font-weight:700;padding:4px 10px;border-radius:99px;border:1px solid var(--line);background:var(--card);display:inline-flex;align-items:center;gap:6px}
+.pill::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ink-2)}
+.pill.ok::before{background:var(--go)}
+.pill.bad::before{background:var(--danger)}
+
+/* Contenu */
+main{
+  flex:1;
+  overflow-y:auto;
+  padding:4px 16px 28px;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;
+}
+main h2{
+  margin:22px 4px 6px;
+  font-size:.95rem;
+  font-weight:700;
+  color:var(--ink-2);
+  display:flex;align-items:center;gap:8px;
+}
+main h2 .n{
+  font-weight:600;font-size:.8rem;
+  background:var(--line);color:var(--ink-2);
+  border-radius:99px;padding:1px 8px;
+}
+ul.list{list-style:none;margin:0;padding:0;background:var(--card);border-radius:var(--radius);border:1px solid var(--line);overflow:hidden}
+ul.list > li{border-top:1px solid var(--line)}
+ul.list > li:first-child{border-top:0}
+
+/* Articles */
+.item{display:flex;align-items:center;min-height:56px;padding:4px 6px 4px 8px;gap:4px}
+.check{
+  flex:none;width:48px;height:48px;display:grid;place-items:center;
+}
+.check span{
+  width:28px;height:28px;border-radius:50%;
+  border:2px solid var(--ink-2);
+  display:grid;place-items:center;
+  color:transparent;
+  transition:background .12s ease,border-color .12s ease;
+}
+.check svg{width:16px;height:16px}
+.item.done .check span{background:var(--go);border-color:var(--go);color:var(--go-ink)}
+.item .txtcol{flex:1;min-width:0;display:flex;flex-direction:column}
+.item .name{font-size:1.06rem;font-weight:600;overflow-wrap:anywhere}
+.item .by{color:var(--ink-2);font-size:.8rem}
+.item.done .name{text-decoration:line-through;color:var(--ink-2);font-weight:500}
+.item .qty{
+  font-weight:700;font-size:.85rem;
+  background:var(--line);border-radius:99px;padding:2px 9px;margin-right:2px;
+}
+.rm{flex:none;width:44px;height:44px;display:grid;place-items:center;color:var(--ink-2);border-radius:50%}
+.rm svg{width:18px;height:18px}
+.rm:active{background:var(--line)}
+.item.flash{animation:flash 1.2s ease-out}
+@keyframes flash{from{background:var(--mark);color:var(--mark-ink)}to{background:transparent}}
+
+/* À prévoir : le surligneur */
+.plan{margin-top:8px}
+.plan h2{margin-top:14px;color:var(--ink);font-size:1.15rem;font-weight:800;letter-spacing:-0.01em}
+.plan .hint{margin:-2px 4px 8px;color:var(--ink-2);font-size:.88rem}
+.sug{display:flex;align-items:stretch}
+.sug-main{
+  flex:1;display:flex;align-items:center;gap:12px;
+  text-align:left;padding:10px 6px 10px 14px;min-height:60px;min-width:0;
+}
+.sug-main .txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.mark{
+  align-self:flex-start;
+  font-weight:800;font-size:1.08rem;
+  background:linear-gradient(transparent 38%,var(--mark) 38%,var(--mark) 92%,transparent 92%);
+  padding:0 4px;margin-left:-4px;
+  color:var(--ink);
+}
+@media (prefers-color-scheme: dark){.mark{color:var(--ink)}}
+.meta{color:var(--ink-2);font-size:.85rem}
+.plus{
+  flex:none;width:36px;height:36px;border-radius:50%;
+  background:var(--ink);color:var(--paper);
+  display:grid;place-items:center;
+}
+.plus svg{width:18px;height:18px}
+.sug-x{flex:none;width:44px;color:var(--ink-2);display:grid;place-items:center}
+.sug-x svg{width:16px;height:16px}
+
+.ghost{
+  display:block;margin:10px auto 0;
+  padding:10px 16px;border-radius:99px;
+  color:var(--ink-2);font-weight:600;font-size:.92rem;
+  border:1px solid var(--line);background:var(--card);
+}
+.empty{
+  margin:28px 8px;padding:20px;border-radius:var(--radius);
+  border:1.5px dashed var(--line);color:var(--ink-2);text-align:center;
+}
+.empty b{display:block;color:var(--ink);font-size:1.05rem;margin-bottom:4px}
+
+/* Historique */
+.hrow{display:flex;align-items:center;gap:10px;padding:12px 8px 12px 14px}
+.hrow .txt{flex:1;min-width:0}
+.hrow .t{font-weight:700;font-size:1.04rem}
+.hrow .r{color:var(--ink-2);font-size:.82rem}
+.hrow .d{color:var(--ink-2);font-size:.88rem;margin-top:2px}
+.btn{
+  flex:none;padding:9px 14px;border-radius:99px;font-weight:700;font-size:.9rem;
+  background:var(--ink);color:var(--paper);min-height:40px;
+}
+.btn.soft{background:transparent;color:var(--ink-2);border:1px solid var(--line)}
+.btn[disabled]{opacity:.55;cursor:default}
+.btn.danger{background:transparent;color:var(--danger);border:1px solid var(--danger)}
+
+/* Réglages */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-top:8px}
+.card p{margin:0 0 10px;color:var(--ink-2);font-size:.92rem}
+.card p:last-child{margin-bottom:0}
+.card .row{display:flex;flex-wrap:wrap;gap:8px}
+.orow{display:flex;align-items:center;gap:6px;padding:4px 4px 4px 14px;min-height:50px}
+.orow .nm{flex:1;font-weight:600}
+.arrow{width:44px;height:44px;display:grid;place-items:center;border-radius:50%;color:var(--ink)}
+.arrow svg{width:18px;height:18px}
+.arrow[disabled]{opacity:.25;cursor:default}
+.arrow:not([disabled]):active{background:var(--line)}
+
+.code{font-size:1.7rem;font-weight:800;letter-spacing:.06em;font-variant-numeric:tabular-nums;padding:6px 0 10px;user-select:all}
+.field{width:100%;height:46px;padding:0 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);font-size:1rem}
+.field:focus{outline:none;border-color:var(--ink)}
+.join{display:flex;gap:8px}
+.join .field{flex:1;min-width:0;text-transform:uppercase;letter-spacing:.05em}
+
+/* Zone d’ajout */
+.dock{
+  flex:none;
+  background:var(--card);
+  border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+#typing{padding:10px 12px 0;display:flex;flex-direction:column;gap:8px}
+#chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}
+#chips::-webkit-scrollbar{display:none}
+.chip{
+  flex:none;padding:8px 14px;border-radius:99px;
+  background:var(--paper);border:1px solid var(--line);font-weight:600;font-size:.92rem;
+}
+.pick{display:flex;align-items:center;gap:8px;color:var(--ink-2);font-size:.88rem}
+.pick select{
+  flex:1;min-width:0;padding:8px 10px;border-radius:10px;
+  background:var(--paper);border:1px solid var(--line);color:var(--ink);
+}
+#addform{display:flex;gap:8px;padding:10px 12px;align-items:center}
+#in{
+  flex:1;min-width:0;height:48px;padding:0 16px;border-radius:99px;
+  background:var(--paper);border:1.5px solid var(--line);color:var(--ink);font-size:1rem;
+}
+#in::placeholder{color:var(--ink-2)}
+#in:focus{outline:none;border-color:var(--ink)}
+.round{
+  flex:none;width:48px;height:48px;border-radius:50%;display:grid;place-items:center;
+  border:1.5px solid var(--line);background:var(--paper);
+}
+.round svg{width:22px;height:22px}
+.round.on{background:var(--mark);color:var(--mark-ink);border-color:var(--mark)}
+.round.primary{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+
+/* Onglets */
+.tabs{display:flex;border-top:1px solid var(--line)}
+.tabs button{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:8px 4px 8px;color:var(--ink-2);font-size:.78rem;font-weight:600;min-height:56px;justify-content:center;
+}
+.tabs button svg{width:24px;height:24px}
+.tabs button[aria-current="page"]{color:var(--ink)}
+.tabs button[aria-current="page"] svg{stroke-width:2.4}
+
+/* Message */
+#toast{
+  position:absolute;left:12px;right:12px;bottom:calc(var(--dock-h,150px) + 10px);
+  background:var(--ink);color:var(--paper);
+  border-radius:12px;padding:12px 14px;
+  display:flex;align-items:center;gap:12px;justify-content:space-between;
+  opacity:0;transform:translateY(6px);pointer-events:none;
+  transition:opacity .18s ease,transform .18s ease;z-index:5;
+  font-size:.95rem;
+}
+#toast.show{opacity:1;transform:none;pointer-events:auto}
+#toast button{font-weight:800;color:var(--mark);padding:4px 6px}
+
+@media (prefers-reduced-motion: reduce){
+  *{transition:none !important;animation:none !important}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top" id="top"></header>
+  <main id="main" tabindex="-1"></main>
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+  <div class="dock" id="dock">
+    <div id="addzone">
+      <div id="typing" hidden>
+        <div id="chips"></div>
+        <label class="pick">Rayon <select id="rayon"></select></label>
+      </div>
+      <form id="addform" autocomplete="off">
+        <input id="in" type="text" placeholder="Ajouter un article" enterkeyhint="done" autocapitalize="sentences" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Nom de l’article à ajouter">
+        <button type="button" class="round" id="mic" aria-label="Dicter des articles" hidden></button>
+        <button type="submit" class="round primary" id="addbtn" aria-label="Ajouter à la liste"></button>
+      </form>
+    </div>
+    <nav class="tabs" aria-label="Navigation principale">
+      <button type="button" data-tab="list" id="tab-list"></button>
+      <button type="button" data-tab="history" id="tab-history"></button>
+      <button type="button" data-tab="settings" id="tab-settings"></button>
+    </nav>
+  </div>
+  <input type="file" id="file" accept="application/json,.json" hidden>
+</div>
+
+<script src="firebase-config.js"></script>
+<script>
+(() => {
+'use strict';
+
+/* ---------- Constantes ---------- */
+const KEY = 'caddie.v1';
+const DAY = 86400000;
+const NB = '\u00A0';
+const RAYONS = ['Fruits et légumes','Boulangerie','Boucherie et poissonnerie','Crèmerie','Épicerie','Boissons','Surgelés','Hygiène et maison','Autre'];
+
+// Mots-clés sans accents, au singulier. Le pluriel (s ou x) est reconnu automatiquement.
+const KW = {
+  'Fruits et légumes': ['pomme','poire','banane','orange','citron','clementine','mandarine','fraise','framboise','myrtille','raisin','kiwi','melon','pasteque','peche','nectarine','abricot','cerise','ananas','mangue','avocat','tomate','concombre','carotte','courgette','aubergine','poivron','oignon','echalote','ail','patate','salade','laitue','mache','roquette','epinard','brocoli','chou','poireau','champignon','haricot','radis','betterave','celeri','fenouil','persil','basilic','coriandre','menthe','ciboulette','legume','fruit','gingembre','courge','potiron','navet','endive','artichaut','asperge'],
+  'Boulangerie': ['pain','baguette','brioche','croissant','viennoiserie','tarte','pâtisserie','patisserie','gateau','ficelle','tradition','fougasse'],
+  'Boucherie et poissonnerie': ['poulet','boeuf','steak','hache','porc','jambon','saucisse','saucisson','lardon','bacon','dinde','veau','agneau','canard','escalope','cote','roti','merguez','poisson','saumon','thon','cabillaud','crevette','moule','sardine','colin','truite','charcuterie','viande','rillette','chorizo','bavette','entrecote','filet','gambas','lieu'],
+  'Crèmerie': ['lait','yaourt','yogourt','fromage','beurre','creme','oeuf','emmental','gruyere','mozzarella','parmesan','camembert','chevre','comte','raclette','faisselle','skyr','margarine','brie','roquefort','feta','mascarpone','ricotta','kefir','flan'],
+  'Épicerie': ['pate','riz','farine','sucre','sel','poivre','huile','vinaigre','moutarde','mayonnaise','ketchup','sauce','conserve','cafe','the','tisane','chocolat','cereale','muesli','confiture','miel','nutella','biscuit','chips','bonbon','compote','semoule','lentille','quinoa','spaghetti','penne','coquillette','tagliatelle','nouille','epice','levure','bouillon','concentre','cornichon','olive','noix','amande','cacahuete','biscotte','cracotte','capsule','pesto','houmous','cacao','vanille','pate a tartiner','maizena','tapioca','couscous','boulgour','polenta','sirop'],
+  'Boissons': ['eau','jus','soda','coca','limonade','biere','vin','cidre','champagne','whisky','vodka','rhum','perrier','evian','badoit','orangina','schweppes','boisson','tonic','cola','pastis','aperitif','prosecco','gin'],
+  'Surgelés': ['glace','sorbet','pizza','frite','nugget','cordon','poelee','beignet'],
+  'Hygiène et maison': ['papier','essuie','sopalin','mouchoir','shampoing','shampooing','gel','savon','dentifrice','brosse','deodorant','rasoir','coton','serviette','tampon','couche','lessive','adoucissant','liquide','vaisselle','eponge','sac','poubelle','nettoyant','desinfectant','lingette','pile','ampoule','allumette','bougie','film','aluminium','detergent','tablette','lave','maquillage','parfum','demaquillant','savonnette','cotons','balai','serpillere','insecticide','litiere']
+};
+const RAYON_SCAN = ['Surgelés','Boissons','Fruits et légumes','Boulangerie','Boucherie et poissonnerie','Crèmerie','Hygiène et maison','Épicerie'];
+const OVERRIDES = [
+  ['Surgelés', ['surgele','surgelee','congele','congelee']],
+  ['Hygiène et maison', ['solaire','hydratant','hydratante','javel']]
+];
+const COMMON = ['Lait','Œufs','Beurre','Yaourts','Fromage râpé','Crème fraîche','Pain','Baguette','Pain de mie','Bananes','Pommes','Tomates','Carottes','Pommes de terre','Oignons','Salade','Courgettes','Citrons','Avocats','Fraises','Poivrons','Concombre','Champignons','Poulet','Jambon','Steak haché','Saumon','Pâtes','Riz','Farine','Sucre','Sel','Poivre','Huile d’olive','Moutarde','Mayonnaise','Ketchup','Lentilles','Café','Thé','Céréales','Confiture','Chocolat','Biscuits','Eau','Jus d’orange','Coca','Bière','Vin rouge','Glace','Pizza surgelée','Frites surgelées','Papier toilette','Sopalin','Liquide vaisselle','Lessive','Gel douche','Shampoing','Dentifrice','Éponges','Sacs poubelle'];
+
+const ICON = {
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  mic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+  list:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>',
+  clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>',
+  down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>'
+};
+
+/* ---------- Outils ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const norm = s => String(s).toLowerCase().replace(/œ/g,'oe').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[’‘`]/g,"'").replace(/\s+/g,' ').trim();
+const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const plural = (n, one, many) => n >= 2 ? many : one;
+const kwMatch = (w, kw) => w === kw || w === kw + 's' || w === kw + 'x';
+
+function agoText(days){
+  if (days < 1) return 'aujourd’hui';
+  if (days < 2) return 'hier';
+  const n = Math.round(days);
+  return 'il y a ' + n + ' jours';
+}
+function everyText(avg){
+  const n = Math.max(1, Math.round(avg));
+  return n === 1 ? 'tous les jours' : 'tous les ' + n + ' jours';
+}
+
+/* ---------- État et stockage ---------- */
+function normalizeState(s){
+  const o = { items:[], history:{}, dismissed:{}, order:RAYONS.slice(), share:null, me:'' };
+  if (s && typeof s === 'object'){
+    if (Array.isArray(s.items)){
+      o.items = s.items.filter(i => i && i.name && i.id).map(i => ({
+        id:String(i.id), name:String(i.name), key:norm(i.name),
+        rayon:RAYONS.includes(i.rayon) ? i.rayon : 'Autre',
+        qty:Math.max(1, parseInt(i.qty,10) || 1),
+        done:!!i.done, doneTs:i.doneTs || null, ts:Number(i.ts) || 0, by:String(i.by || '').slice(0,20)
+      }));
+    }
+    if (s.history && typeof s.history === 'object'){
+      for (const [k,h] of Object.entries(s.history)){
+        if (h && h.name && Array.isArray(h.dates)){
+          o.history[k] = { name:String(h.name), rayon:RAYONS.includes(h.rayon) ? h.rayon : 'Autre', dates:h.dates.map(Number).filter(n => n > 0) };
+        }
+      }
+    }
+    if (s.dismissed && typeof s.dismissed === 'object') o.dismissed = s.dismissed;
+    if (s.share && typeof s.share.code === 'string' && /^[A-HJKMNP-Z2-9]{10}$/.test(s.share.code)) o.share = { code:s.share.code };
+    if (typeof s.me === 'string') o.me = s.me.slice(0,20);
+    if (Array.isArray(s.order)){
+      const ord = [...new Set(s.order.filter(r => RAYONS.includes(r)))];
+      RAYONS.forEach(r => { if (!ord.includes(r)) ord.push(r); });
+      o.order = ord;
+    }
+  }
+  return o;
+}
+function load(){
+  try { const raw = localStorage.getItem(KEY); if (raw) return normalizeState(JSON.parse(raw)); } catch(e){}
+  return normalizeState({});
+}
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
+
+let state = load();
+let tab = 'list';
+let lastAdded = null;
+let manualRayon = false;
+
+/* ---------- Rayons ---------- */
+function guessRayon(name){
+  const k = norm(name);
+  if (state.history[k]) return state.history[k].rayon;
+  const words = k.split(/[\s'’\-]+/).filter(Boolean);
+  for (const [rayon, list] of OVERRIDES)
+    for (const w of words) if (list.some(kw => kwMatch(w, kw))) return rayon;
+  for (const w of words)
+    for (const rayon of RAYON_SCAN)
+      if (KW[rayon].some(kw => kwMatch(w, norm(kw)))) return rayon;
+  return 'Autre';
+}
+
+/* ---------- Prédiction ---------- */
+function stats(h){
+  const d = h.dates.slice().sort((a,b) => a - b);
+  const gaps = [];
+  for (let i = 1; i < d.length; i++){
+    const g = (d[i] - d[i-1]) / DAY;
+    if (g >= 1) gaps.push(g);
+  }
+  if (!gaps.length) return null;
+  const recent = gaps.slice(-6);
+  const avg = recent.reduce((a,b) => a + b, 0) / recent.length;
+  const since = (Date.now() - d[d.length-1]) / DAY;
+  return { avg, since, count:d.length, last:d[d.length-1] };
+}
+function suggestions(){
+  const out = [];
+  for (const [key,h] of Object.entries(state.history)){
+    const s = stats(h);
+    if (!s) continue;
+    if (state.items.some(i => i.key === key && !i.done)) continue;
+    if (state.dismissed[key] && Date.now() - state.dismissed[key] < 7 * DAY) continue;
+    if (s.since < s.avg * 0.85) continue;
+    if (s.since > s.avg * 4) continue;
+    out.push({ key, h, s, score:s.since / s.avg });
+  }
+  return out.sort((a,b) => b.score - a.score).slice(0, 6);
+}
+
+/* ---------- Actions sur la liste ---------- */
+function parseEntry(t){
+  t = t.trim();
+  let qty = 1, name = t, m;
+  if ((m = t.match(/^(\d{1,2})\s*(?:x|×)?\s+(.+)$/i))){ qty = +m[1]; name = m[2]; }
+  else if ((m = t.match(/^(.+?)\s*(?:x|×)\s*(\d{1,2})$/i))){ name = m[1]; qty = +m[2]; }
+  return { name:name.trim(), qty:Math.max(1, qty) };
+}
+function addItem(name, rayon, qty){
+  name = cap((name || '').trim());
+  if (!name) return false;
+  const key = norm(name);
+  qty = qty || 1;
+  const ex = state.items.find(i => i.key === key && !i.done);
+  if (ex){
+    ex.qty += qty;
+    lastAdded = ex.id;
+    pushItem(ex);
+    toast(ex.name + ' : quantité portée à ' + ex.qty);
+  } else {
+    const it = { id:uid(), name:(state.history[key] ? state.history[key].name : name), key, rayon:rayon || guessRayon(name), qty, done:false, doneTs:null, ts:Date.now(), by:state.me || '' };
+    state.items.push(it);
+    lastAdded = it.id;
+    pushItem(it);
+  }
+  save();
+  return true;
+}
+function ensureHist(it){
+  const h = state.history[it.key] || (state.history[it.key] = { name:it.name, rayon:it.rayon, dates:[] });
+  h.rayon = it.rayon;
+  return h;
+}
+function toggle(id){
+  const it = state.items.find(i => i.id === id);
+  if (!it) return;
+  it.done = !it.done;
+  const h = ensureHist(it);
+  if (it.done){
+    it.doneTs = Date.now();
+    h.dates.push(it.doneTs);
+    h.dates.sort((a,b) => a - b);
+    h.dates = h.dates.slice(-12);
+    pushHistDate(it, it.doneTs, true);
+  } else {
+    const ts = it.doneTs;
+    h.dates = h.dates.filter(t => t !== ts);
+    it.doneTs = null;
+    if (!h.dates.length){ delete state.history[it.key]; delHist(it.key); }
+    else pushHistDate(it, ts, false);
+  }
+  pushItem(it);
+  save(); render();
+}
+function removeItem(id){
+  const idx = state.items.findIndex(i => i.id === id);
+  if (idx < 0) return;
+  const [it] = state.items.splice(idx, 1);
+  delItem(it.id);
+  save(); render();
+  toast(it.name + ' retiré', 'Annuler', () => { state.items.splice(Math.min(idx, state.items.length), 0, it); pushItem(it); save(); render(); });
+}
+
+/* ---------- Affichage ---------- */
+function renderHeader(){
+  const top = $('#top');
+  if (tab === 'list'){
+    const open = state.items.filter(i => !i.done).length;
+    const done = state.items.length - open;
+    let sub = open ? open + ' ' + plural(open,'article','articles') + ' à acheter' : 'Rien à acheter pour le moment';
+    if (done) sub += ', ' + done + ' dans le caddie';
+    const pct = state.items.length ? Math.round(done / state.items.length * 100) : 0;
+    const st = shareStatus();
+    top.innerHTML = '<div class="hd"><h1>Caddie</h1>' + (st ? '<span class="pill ' + st.k + '">' + esc(st.t) + '</span>' : '') + '</div><p class="sub">' + esc(sub) + '</p>' +
+      (state.items.length ? '<div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><i style="width:' + pct + '%"></i></div>' : '');
+  } else if (tab === 'history'){
+    top.innerHTML = '<h1>Historique</h1><p class="sub">' + (state.share ? 'Les achats de tout le foyer, et leur rythme.' : 'Ce que vous achetez, et à quel rythme.') + '</p>';
+  } else {
+    top.innerHTML = '<h1>Réglages</h1><p class="sub">' + (state.share ? 'Liste partagée entre vos appareils.' : 'Vos données restent sur cet appareil.') + '</p>';
+  }
+}
+
+function itemHtml(it){
+  const by = (state.share && it.by && it.by !== state.me) ? 'Ajouté par ' + it.by : '';
+  return '<li class="item' + (it.done ? ' done' : '') + (it.id === lastAdded ? ' flash' : '') + '">' +
+    '<button type="button" class="check" data-act="toggle" data-id="' + it.id + '" aria-pressed="' + it.done + '" aria-label="' + (it.done ? 'Décocher ' : 'Cocher ') + esc(it.name) + '"><span>' + ICON.check + '</span></button>' +
+    '<span class="txtcol"><span class="name">' + esc(it.name) + '</span>' + (by ? '<span class="by">' + esc(by) + '</span>' : '') + '</span>' +
+    (it.qty > 1 ? '<span class="qty">×' + it.qty + '</span>' : '') +
+    '<button type="button" class="rm" data-act="remove" data-id="' + it.id + '" aria-label="Retirer ' + esc(it.name) + '">' + ICON.x + '</button>' +
+  '</li>';
+}
+
+function listHtml(){
+  let html = '';
+  const sug = suggestions();
+  if (sug.length){
+    html += '<section class="plan"><h2>À prévoir' + NB + '?</h2><p class="hint">D’après votre rythme d’achat habituel.</p><ul class="list">' +
+      sug.map(x => '<li class="sug">' +
+        '<button type="button" class="sug-main" data-act="sug-add" data-key="' + esc(x.key) + '" aria-label="Ajouter ' + esc(x.h.name) + ' à la liste">' +
+          '<span class="txt"><span class="mark">' + esc(x.h.name) + '</span>' +
+          '<span class="meta">Habituellement ' + everyText(x.s.avg) + ', dernier achat ' + agoText(x.s.since) + '</span></span>' +
+          '<span class="plus">' + ICON.plus + '</span></button>' +
+        '<button type="button" class="sug-x" data-act="sug-dismiss" data-key="' + esc(x.key) + '" aria-label="Ignorer ' + esc(x.h.name) + ' pendant 7 jours">' + ICON.x + '</button>' +
+      '</li>').join('') + '</ul></section>';
+  }
+  if (!state.items.length){
+    html += '<div class="empty"><b>Votre liste est vide</b>Écrivez un article en bas de l’écran' + (SR ? ', ou dictez-en plusieurs avec le micro' : '') + '. Cochez-les en magasin : Caddie apprendra ce qu’il vous faut et quand.</div>';
+    return html;
+  }
+  const open = state.items.filter(i => !i.done);
+  const done = state.items.filter(i => i.done);
+  const groups = {};
+  open.forEach(i => (groups[i.rayon] = groups[i.rayon] || []).push(i));
+  state.order.forEach(r => {
+    if (!groups[r]) return;
+    html += '<section><h2>' + esc(r) + ' <span class="n">' + groups[r].length + '</span></h2><ul class="list">' + groups[r].map(itemHtml).join('') + '</ul></section>';
+  });
+  if (done.length){
+    html += '<section><h2>Dans le caddie <span class="n">' + done.length + '</span></h2><ul class="list">' + done.map(itemHtml).join('') + '</ul>' +
+      '<button type="button" class="ghost" data-act="clear-done">Vider le caddie</button></section>';
+  }
+  return html;
+}
+
+function historyHtml(){
+  const rows = Object.entries(state.history).filter(([k,h]) => h.dates.length).map(([k,h]) => ({ k, h, s:stats(h), last:Math.max(...h.dates) }))
+    .sort((a,b) => b.last - a.last);
+  if (!rows.length){
+    return '<div class="empty"><b>Pas encore d’historique</b>Chaque article coché en magasin est enregistré. Après deux achats d’un même produit, Caddie estime à quel rythme vous le rachetez.' +
+      (state.share ? '' : '<br><button type="button" class="btn" style="margin-top:14px" data-act="demo">Charger un exemple pour essayer</button>') + '</div>';
+  }
+  return '<ul class="list" style="margin-top:8px">' + rows.map(({k,h,s,last}) => {
+    const onList = state.items.some(i => i.key === k && !i.done);
+    const n = h.dates.length;
+    let line = 'Acheté ' + n + ' ' + plural(n,'fois','fois') + (s ? ', en général ' + everyText(s.avg) : '') + '. Dernier achat : ' + agoText((Date.now() - last) / DAY) + '.';
+    return '<li class="hrow"><div class="txt"><div class="t">' + esc(h.name) + '</div><div class="r">' + esc(h.rayon) + '</div><div class="d">' + esc(line) + '</div></div>' +
+      '<button type="button" class="btn' + (onList ? ' soft' : '') + '"' + (onList ? ' disabled' : '') + ' data-act="hist-add" data-key="' + esc(k) + '">' + (onList ? 'Dans la liste' : 'Ajouter') + '</button>' +
+      '<button type="button" class="rm" data-act="hist-del" data-key="' + esc(k) + '" aria-label="Oublier ' + esc(h.name) + '">' + ICON.x + '</button></li>';
+  }).join('') + '</ul>';
+}
+
+function shareHtml(){
+  let h = '<h2>Partage en famille</h2><div class="card">';
+  if (!CFG){
+    h += '<p>Le partage n’est pas encore activé. Il demande de brancher un service gratuit (Firebase) : suivez le guide, puis remplissez le fichier <b>firebase-config.js</b>.</p>';
+  } else if (!state.share){
+    h += '<p>Créez une liste commune : tous les appareils qui la rejoignent voient les mêmes articles, en direct, même avec peu de réseau.</p>' +
+      '<div class="row"><button type="button" class="btn" data-act="share-create">Créer une liste partagée</button></div>' +
+      '<p style="margin-top:16px">Vous avez reçu un code ?</p>' +
+      '<div class="join"><input id="joincode" class="field" type="text" placeholder="XXXXX-XXXXX" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Code de partage"><button type="button" class="btn" data-act="share-join">Rejoindre</button></div>';
+  } else {
+    h += '<p>Code de votre liste partagée</p><div class="code">' + esc(fmtCode(state.share.code)) + '</div>' +
+      '<p>Envoyez ce lien ou ce code aux personnes de votre foyer. Quiconque possède le code peut lire et modifier la liste : ne le publiez pas.</p>' +
+      '<div class="row"><button type="button" class="btn" data-act="share-link">Envoyer l’invitation</button><button type="button" class="btn soft" data-act="share-copy">Copier le code</button></div>' +
+      '<p style="margin-top:16px">Votre prénom, pour que les autres voient qui ajoute quoi</p>' +
+      '<input id="meinput" class="field" type="text" maxlength="20" value="' + esc(state.me) + '" autocomplete="off" aria-label="Votre prénom">' +
+      '<div class="row" style="margin-top:16px"><button type="button" class="btn danger" data-act="share-leave">Quitter le partage</button></div>';
+  }
+  return h + '</div>';
+}
+
+function settingsHtml(){
+  const ord = state.order;
+  return '<h2>Ordre des rayons</h2><p class="hint" style="margin:-2px 4px 8px;color:var(--ink-2);font-size:.88rem">Mettez-les dans l’ordre de votre magasin pour ne plus faire d’allers-retours.</p>' +
+    '<ul class="list">' + ord.map((r,i) => '<li class="orow"><span class="nm">' + esc(r) + '</span>' +
+      '<button type="button" class="arrow" data-act="up" data-i="' + i + '"' + (i === 0 ? ' disabled' : '') + ' aria-label="Monter ' + esc(r) + '">' + ICON.up + '</button>' +
+      '<button type="button" class="arrow" data-act="down" data-i="' + i + '"' + (i === ord.length-1 ? ' disabled' : '') + ' aria-label="Descendre ' + esc(r) + '">' + ICON.down + '</button></li>').join('') + '</ul>' +
+    shareHtml() +
+    (state.share ? '' : '<h2>Tester les suggestions</h2><div class="card"><p>Charge un historique d’exemple (lait, café, œufs…) pour voir apparaître la section «' + NB + 'À prévoir' + NB + '?' + NB + '».</p><div class="row"><button type="button" class="btn" data-act="demo">Charger un exemple</button></div></div>') +
+    '<h2>Vos données</h2><div class="card"><p>' + (state.share ? 'La liste partagée est conservée en ligne. Vous pouvez exporter une copie de sécurité.' : 'Exportez une copie de sécurité, ou restaurez-en une.') + '</p><div class="row">' +
+      '<button type="button" class="btn soft" data-act="export">Exporter</button>' +
+      (state.share ? '' : '<button type="button" class="btn soft" data-act="import">Importer</button>') +
+      '<button type="button" class="btn danger" data-act="reset">Tout effacer</button></div></div>';
+}
+
+function render(){
+  const main = $('#main');
+  const scroll = main.scrollTop;
+  renderHeader();
+  main.innerHTML = tab === 'list' ? listHtml() : tab === 'history' ? historyHtml() : settingsHtml();
+  main.scrollTop = scroll;
+  $('#addzone').hidden = tab !== 'list';
+  [['list','Liste',ICON.list],['history','Historique',ICON.clock],['settings','Réglages',ICON.gear]].forEach(([id,label,ic]) => {
+    const b = $('#tab-' + id);
+    b.innerHTML = ic + '<span>' + label + '</span>';
+    if (id === tab) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
+  });
+  updateTyping();
+  if (lastAdded){
+    const f = main.querySelector('.flash');
+    if (f) f.scrollIntoView({ block:'nearest' });
+    lastAdded = null;
+  }
+  syncDock();
+}
+function syncDock(){ $('#app').style.setProperty('--dock-h', $('#dock').offsetHeight + 'px'); }
+
+/* ---------- Saisie et suggestions de saisie ---------- */
+const input = $('#in'), rayonSel = $('#rayon'), chipsEl = $('#chips');
+function fillRayonSelect(){
+  rayonSel.innerHTML = state.order.map(r => '<option>' + esc(r) + '</option>').join('');
+}
+function candidates(){
+  const m = new Map();
+  Object.entries(state.history).forEach(([k,h]) => m.set(k, { key:k, name:h.name, rayon:h.rayon }));
+  COMMON.forEach(n => { const k = norm(n); if (!m.has(k)) m.set(k, { key:k, name:n, rayon:guessRayon(n) }); });
+  return [...m.values()].filter(c => !state.items.some(i => i.key === c.key && !i.done));
+}
+function updateTyping(){
+  const v = input.value.trim();
+  const box = $('#typing');
+  if (tab !== 'list' || !v){ box.hidden = true; syncDock(); return; }
+  box.hidden = false;
+  const last = parseEntry(v.split(',').pop()).name;
+  if (!manualRayon) rayonSel.value = guessRayon(last);
+  const q = norm(last);
+  const found = q ? candidates().filter(c => c.key.includes(q) && c.key !== q)
+    .sort((a,b) => (b.key.startsWith(q) - a.key.startsWith(q)) || a.key.length - b.key.length).slice(0, 5) : [];
+  chipsEl.innerHTML = found.map(c => '<button type="button" class="chip" data-act="add-chip" data-name="' + esc(c.name) + '" data-rayon="' + esc(c.rayon) + '">' + esc(c.name) + '</button>').join('');
+  chipsEl.hidden = !found.length;
+  syncDock();
+}
+input.addEventListener('input', () => updateTyping());
+rayonSel.addEventListener('change', () => { manualRayon = true; });
+chipsEl.addEventListener('mousedown', e => e.preventDefault());
+
+$('#addform').addEventListener('submit', e => {
+  e.preventDefault();
+  const v = input.value.trim();
+  if (!v) return;
+  const parts = v.split(',').map(s => s.trim()).filter(Boolean);
+  parts.forEach(p => { const { name, qty } = parseEntry(p); addItem(name, parts.length === 1 ? rayonSel.value : null, qty); });
+  input.value = '';
+  manualRayon = false;
+  render();
+  input.focus();
+});
+
+/* ---------- Dictée vocale ---------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const ART = /^(?:(?:une|un|les|le|la|des|du|de la|de)\s+|(?:de l|d|l)['’]\s*)/i;
+function addFromVoice(t){
+  let s = t.replace(/^\s*(?:ajoute(?:r|z)?|rajoute(?:r|z)?|mets?)\s+/i, '').replace(/\s+(?:à|a)\s+la\s+liste\.?$/i, '');
+  const parts = s.split(/,|\bet\b|\bpuis\b/i).map(p => p.trim().replace(ART, '').trim()).filter(Boolean);
+  let n = 0;
+  parts.forEach(p => { const { name, qty } = parseEntry(p); if (addItem(name, null, qty)) n++; });
+  render();
+  if (n) toast(n + ' ' + plural(n,'article ajouté','articles ajoutés'));
+  else toast('Je n’ai rien compris, réessayez ou écrivez l’article.');
+}
+const micBtn = $('#mic');
+if (SR){
+  micBtn.hidden = false;
+  let rec = null;
+  micBtn.addEventListener('click', () => {
+    if (rec){ try { rec.stop(); } catch(e){} return; }
+    try {
+      rec = new SR();
+      rec.lang = 'fr-FR';
+      rec.interimResults = false;
+      rec.maxAlternatives = 1;
+      rec.onresult = ev => addFromVoice(ev.results[0][0].transcript);
+      rec.onerror = () => toast('Le micro n’est pas disponible. Vérifiez l’autorisation du micro.');
+      rec.onend = () => { rec = null; micBtn.classList.remove('on'); };
+      micBtn.classList.add('on');
+      rec.start();
+    } catch(e){ rec = null; micBtn.classList.remove('on'); toast('La dictée n’est pas disponible sur cet appareil.'); }
+  });
+}
+
+/* ---------- Message temporaire ---------- */
+let toastTimer;
+function hideToast(){ const el = $('#toast'); el.classList.remove('show'); setTimeout(() => { if (!el.classList.contains('show')) el.hidden = true; }, 200); }
+function toast(msg, label, fn){
+  const el = $('#toast');
+  el.innerHTML = '<span>' + esc(msg) + '</span>' + (label ? '<button type="button" id="toast-act">' + esc(label) + '</button>' : '');
+  el.hidden = false;
+  requestAnimationFrame(() => el.classList.add('show'));
+  clearTimeout(toastTimer);
+  const act = $('#toast-act');
+  if (act) act.onclick = () => { fn(); hideToast(); };
+  toastTimer = setTimeout(hideToast, 4500);
+}
+
+/* ---------- Données de démonstration, export, import ---------- */
+function loadDemo(){
+  if (state.share) return;
+  const demo = [
+    ['Lait','Crèmerie',6,7],['Œufs','Crèmerie',10,9],['Café','Épicerie',21,20],
+    ['Papier toilette','Hygiène et maison',25,26],['Bananes','Fruits et légumes',5,5],
+    ['Yaourts','Crèmerie',7,6],['Pain de mie','Boulangerie',8,3],['Liquide vaisselle','Hygiène et maison',30,12]
+  ];
+  const now = Date.now();
+  demo.forEach(([name, rayon, every, ago]) => {
+    const key = norm(name);
+    const dates = [3,2,1,0].map(i => now - (ago + every * i) * DAY);
+    state.history[key] = { name, rayon, dates };
+    delete state.dismissed[key];
+  });
+  save(); tab = 'list'; render();
+  toast('Historique d’exemple chargé');
+}
+function exportData(){
+  try {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type:'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'caddie-sauvegarde.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  } catch(e){ toast('L’export a échoué sur cet appareil.'); }
+}
+$('#file').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const s = normalizeState(JSON.parse(r.result));
+      s.share = null;
+      if (confirm('Remplacer vos données actuelles par cette sauvegarde ?')){ state = s; save(); fillRayonSelect(); render(); toast('Sauvegarde restaurée'); }
+    } catch(err){ toast('Ce fichier n’est pas une sauvegarde Caddie valide.'); }
+  };
+  r.readAsText(f);
+  e.target.value = '';
+});
+
+/* ---------- Partage et synchronisation (Firebase) ---------- */
+const CFG = (window.CADDIE_FIREBASE && window.CADDIE_FIREBASE.apiKey && window.CADDIE_FIREBASE.projectId) ? window.CADDIE_FIREBASE : null;
+const FB_VERSION = '10.14.1';
+const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+let fb = null, fbPromise = null, unsubs = [];
+const net = { pending:false, cache:false, error:null, connecting:false };
+
+const fmtCode = c => c.slice(0,5) + '-' + c.slice(5);
+const cleanCode = x => String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const validCode = c => /^[A-HJKMNP-Z2-9]{10}$/.test(c);
+function genCode(){
+  const a = new Uint8Array(10);
+  crypto.getRandomValues(a);
+  return [...a].map(n => CODE_CHARS[n % CODE_CHARS.length]).join('');
+}
+const hid = k => encodeURIComponent(k).replace(/%/g, '~').replace(/\./g, '~2E');
+
+async function fbLoad(){
+  if (fb) return fb;
+  if (!fbPromise){
+    fbPromise = (async () => {
+      const mock = window.__caddieFirebaseMock;
+      const base = 'https://www.gstatic.com/firebasejs/' + FB_VERSION + '/';
+      const [app, auth, fs] = mock ? [mock, mock, mock] : await Promise.all([
+        import(base + 'firebase-app.js'), import(base + 'firebase-auth.js'), import(base + 'firebase-firestore.js')
+      ]);
+      const a = app.initializeApp(CFG);
+      let db;
+      try { db = fs.initializeFirestore(a, { localCache:fs.persistentLocalCache({ tabManager:fs.persistentMultipleTabManager() }) }); }
+      catch(e){ db = fs.getFirestore(a); }
+      const au = auth.getAuth(a);
+      await new Promise((resolve, reject) => {
+        let un = null, done = false;
+        const finish = () => { done = true; if (un) un(); resolve(); };
+        un = auth.onAuthStateChanged(au, u => { if (u) finish(); });
+        if (done) un();
+        else if (!au.currentUser) auth.signInAnonymously(au).catch(reject);
+      });
+      fb = { fs, db };
+      return fb;
+    })().catch(e => { fbPromise = null; throw e; });
+  }
+  return fbPromise;
+}
+
+const syncing = () => !!(fb && state.share);
+const dref = (name, id) => fb.fs.doc(fb.db, 'households', state.share.code, name, id);
+const colref = name => fb.fs.collection(fb.db, 'households', state.share.code, name);
+function onErr(e){ net.error = (e && e.code) || 'erreur'; renderHeader(); }
+
+function itemData(it){
+  return { name:it.name, key:it.key, rayon:it.rayon, qty:it.qty, done:!!it.done, doneTs:it.doneTs || null, ts:it.ts || Date.now(), by:it.by || '' };
+}
+function pushItem(it){ if (syncing()) fb.fs.setDoc(dref('items', it.id), itemData(it)).catch(onErr); }
+function delItem(id){ if (syncing()) fb.fs.deleteDoc(dref('items', id)).catch(onErr); }
+function pushHistDate(it, ts, add){
+  if (!syncing()) return;
+  fb.fs.setDoc(dref('history', hid(it.key)), { name:it.name, key:it.key, rayon:it.rayon, dates:add ? fb.fs.arrayUnion(ts) : fb.fs.arrayRemove(ts) }, { merge:true }).catch(onErr);
+}
+function pushHistFull(k, h){
+  if (syncing()) fb.fs.setDoc(dref('history', hid(k)), { name:h.name, key:k, rayon:h.rayon, dates:h.dates }).catch(onErr);
+}
+function delHist(k){ if (syncing()) fb.fs.deleteDoc(dref('history', hid(k))).catch(onErr); }
+async function pushAll(){
+  const ops = [];
+  state.items.forEach(it => ops.push([dref('items', it.id), itemData(it)]));
+  Object.entries(state.history).forEach(([k,h]) => ops.push([dref('history', hid(k)), { name:h.name, key:k, rayon:h.rayon, dates:h.dates }]));
+  for (let i = 0; i < ops.length; i += 400){
+    const b = fb.fs.writeBatch(fb.db);
+    ops.slice(i, i + 400).forEach(([r,d]) => b.set(r, d));
+    await b.commit();
+  }
+}
+
+function shareStatus(){
+  if (!state.share) return null;
+  if (!CFG) return { t:'Partage non configuré', k:'bad' };
+  if (net.error) return { t:'Erreur de partage', k:'bad' };
+  if (net.connecting || !fb) return { t:'Connexion…', k:'wait' };
+  if (!navigator.onLine) return { t:'Hors ligne', k:'wait' };
+  if (net.pending) return { t:'Synchronisation…', k:'wait' };
+  return { t:'Partagée', k:'ok' };
+}
+function stopSync(){ unsubs.forEach(u => { try { u(); } catch(e){} }); unsubs = []; }
+function afterRemote(snap){
+  net.pending = snap.metadata.hasPendingWrites;
+  net.cache = snap.metadata.fromCache;
+  net.error = null;
+  save();
+  if (tab === 'settings') renderHeader(); else render();
+}
+async function startSync(){
+  if (!CFG || !state.share) return;
+  net.connecting = true; net.error = null; renderHeader();
+  try { await fbLoad(); }
+  catch(e){ net.connecting = false; net.error = (e && e.code) || 'connexion'; renderHeader(); return; }
+  net.connecting = false;
+  stopSync();
+  const code = state.share.code;
+  unsubs.push(fb.fs.onSnapshot(colref('items'), snap => {
+    if (!state.share || state.share.code !== code) return;
+    state.items = snap.docs.map(d => {
+      const x = d.data();
+      return { id:d.id, name:String(x.name || ''), key:norm(x.name || ''), rayon:RAYONS.includes(x.rayon) ? x.rayon : 'Autre',
+        qty:Math.max(1, parseInt(x.qty, 10) || 1), done:!!x.done, doneTs:x.doneTs || null, ts:Number(x.ts) || 0, by:String(x.by || '') };
+    }).filter(i => i.name).sort((a,b) => a.ts - b.ts);
+    afterRemote(snap);
+  }, onErr));
+  unsubs.push(fb.fs.onSnapshot(colref('history'), snap => {
+    if (!state.share || state.share.code !== code) return;
+    const hist = {};
+    snap.docs.forEach(d => {
+      const x = d.data();
+      const dates = (Array.isArray(x.dates) ? x.dates : []).map(Number).filter(n => n > 0).sort((a,b) => a - b).slice(-12);
+      const k = x.key || d.id;
+      if (x.name) hist[k] = { name:String(x.name), rayon:RAYONS.includes(x.rayon) ? x.rayon : 'Autre', dates };
+    });
+    state.history = hist;
+    afterRemote(snap);
+  }, onErr));
+  renderHeader();
+}
+
+async function createHousehold(){
+  if (!navigator.onLine){ toast('Connectez-vous à internet pour créer le partage.'); return; }
+  toast('Création du partage…');
+  const code = genCode();
+  try {
+    await fbLoad();
+    await fb.fs.setDoc(fb.fs.doc(fb.db, 'households', code), { createdAt:Date.now() });
+    state.share = { code };
+    await pushAll();
+  } catch(e){
+    state.share = null;
+    toast('Impossible de créer le partage (' + ((e && e.code) || 'erreur') + '). Vérifiez la configuration Firebase.');
+    render();
+    return;
+  }
+  save();
+  await startSync();
+  render();
+  toast('Liste partagée créée. Envoyez le code à votre foyer.');
+}
+async function joinHousehold(raw){
+  const code = cleanCode(raw);
+  if (!validCode(code)){ toast('Ce code n’est pas valide : il compte 10 caractères.'); return; }
+  if (state.share && state.share.code === code){ toast('Vous êtes déjà dans ce partage.'); return; }
+  if (!navigator.onLine){ toast('Connectez-vous à internet pour rejoindre un partage.'); return; }
+  toast('Connexion au partage…');
+  try {
+    await fbLoad();
+    const snap = await fb.fs.getDoc(fb.fs.doc(fb.db, 'households', code));
+    if (!snap.exists()){ toast('Code introuvable. Vérifiez-le auprès de la personne qui partage.'); return; }
+  } catch(e){
+    toast('Connexion impossible (' + ((e && e.code) || 'erreur') + '). Vérifiez la configuration Firebase.');
+    return;
+  }
+  if (state.items.length && !confirm('La liste de cet appareil sera remplacée par la liste partagée. Continuer ?')) return;
+  stopSync();
+  state.share = { code };
+  state.items = []; state.history = {};
+  save();
+  await startSync();
+  render();
+  toast('Vous avez rejoint la liste partagée');
+}
+function leaveHousehold(){
+  if (!confirm('Quitter le partage ? La liste actuelle reste sur cet appareil, mais ne se synchronise plus.')) return;
+  stopSync();
+  state.share = null;
+  net.pending = false; net.error = null;
+  save(); render();
+  toast('Vous avez quitté le partage');
+}
+async function copyText(t){
+  try { await navigator.clipboard.writeText(t); toast('Copié'); }
+  catch(e){ window.prompt('Copiez ce texte :', t); }
+}
+async function shareInvite(){
+  if (!state.share) return;
+  const url = location.origin + location.pathname + '?join=' + state.share.code;
+  const text = 'Rejoins ma liste de courses Caddie. Code : ' + fmtCode(state.share.code);
+  if (navigator.share){
+    try { await navigator.share({ title:'Caddie', text, url }); return; }
+    catch(e){ if (e && e.name === 'AbortError') return; }
+  }
+  copyText(text + ' ' + url);
+}
+window.addEventListener('online', () => renderHeader());
+window.addEventListener('offline', () => renderHeader());
+
+/* ---------- Clics ---------- */
+$('#app').addEventListener('click', e => {
+  const t = e.target.closest('[data-act],[data-tab]');
+  if (!t) return;
+  if (t.dataset.tab){ tab = t.dataset.tab; render(); $('#main').scrollTop = 0; return; }
+  const a = t.dataset.act, id = t.dataset.id, key = t.dataset.key;
+  switch (a){
+    case 'toggle': toggle(id); break;
+    case 'remove': removeItem(id); break;
+    case 'clear-done': {
+      const gone = state.items.filter(i => i.done);
+      gone.forEach(i => delItem(i.id));
+      state.items = state.items.filter(i => !i.done);
+      save(); render();
+      toast(gone.length + ' ' + plural(gone.length,'article retiré','articles retirés') + ' du caddie');
+      break;
+    }
+    case 'sug-add': { const h = state.history[key]; if (h){ addItem(h.name, h.rayon, 1); render(); } break; }
+    case 'sug-dismiss': {
+      state.dismissed[key] = Date.now(); save(); render();
+      toast('Masqué pendant 7 jours', 'Annuler', () => { delete state.dismissed[key]; save(); render(); });
+      break;
+    }
+    case 'add-chip': addItem(t.dataset.name, t.dataset.rayon, 1); input.value = ''; manualRayon = false; render(); input.focus(); break;
+    case 'hist-add': { const h = state.history[key]; if (h){ addItem(h.name, h.rayon, 1); render(); toast(h.name + ' ajouté à la liste'); } break; }
+    case 'hist-del': {
+      const h = state.history[key]; if (!h) break;
+      delete state.history[key]; delHist(key); save(); render();
+      toast(h.name + ' oublié', 'Annuler', () => { state.history[key] = h; pushHistFull(key, h); save(); render(); });
+      break;
+    }
+    case 'up': case 'down': {
+      const i = +t.dataset.i, j = a === 'up' ? i - 1 : i + 1;
+      if (j < 0 || j >= state.order.length) break;
+      [state.order[i], state.order[j]] = [state.order[j], state.order[i]];
+      save(); fillRayonSelect(); render();
+      break;
+    }
+    case 'share-create': createHousehold(); break;
+    case 'share-join': joinHousehold(($('#joincode') || {}).value); break;
+    case 'share-link': shareInvite(); break;
+    case 'share-copy': if (state.share) copyText(fmtCode(state.share.code)); break;
+    case 'share-leave': leaveHousehold(); break;
+    case 'demo': loadDemo(); break;
+    case 'export': exportData(); break;
+    case 'import': if (state.share) toast('Quittez d’abord le partage pour importer une sauvegarde.'); else $('#file').click(); break;
+    case 'reset':
+      if (confirm('Effacer la liste, l’historique et les réglages de cet appareil ?' + (state.share ? ' Le lien avec la liste partagée sera aussi supprimé ici ; les autres appareils la gardent.' : ''))){
+        stopSync();
+        try { localStorage.removeItem(KEY); } catch(err){}
+        state = normalizeState({}); fillRayonSelect(); render(); toast('Tout a été effacé');
+      }
+      break;
+  }
+});
+
+document.addEventListener('change', e => {
+  if (e.target && e.target.id === 'meinput'){ state.me = e.target.value.trim().slice(0,20); save(); }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target && e.target.id === 'joincode'){ e.preventDefault(); joinHousehold(e.target.value); }
+});
+
+/* ---------- Démarrage ---------- */
+$('#mic').innerHTML = ICON.mic;
+$('#addbtn').innerHTML = ICON.plus;
+fillRayonSelect();
+render();
+if (state.share && CFG) startSync();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+{
+  const jp = new URLSearchParams(location.search).get('join');
+  if (jp){
+    try { history.replaceState(null, '', location.pathname); } catch(e){}
+    tab = 'settings'; render();
+    const code = cleanCode(jp);
+    if (CFG && validCode(code)){
+      setTimeout(() => { if (confirm('Rejoindre la liste partagée ' + fmtCode(code) + ' ?')) joinHousehold(code); }, 300);
+    } else {
+      toast(CFG ? 'Ce lien de partage n’est pas valide.' : 'Le partage n’est pas activé dans cette installation.');
+    }
+  }
+}
+window.addEventListener('resize', syncDock);
+
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+})();
+</script>
+</body>
+</html>
