@@ -488,6 +488,14 @@ button.txtcol{background:none;text-align:left;align-items:flex-start;padding:10p
 .clearbox .row{display:flex;flex-direction:column;gap:8px}
 .clearbox .btn{width:100%;text-align:left;min-height:46px}
 
+.gsp{margin:10px 6px 0;color:var(--ink-2);font-size:.86rem}
+.spacerow{padding:14px 0;border-top:1px solid var(--line)}
+.spacerow:first-of-type{border-top:0;padding-top:4px}
+.spacerow .meta{margin-left:4px}
+.spacerow .code{font-size:1.5rem;padding:6px 0 10px}
+.spacerow .row{display:flex;flex-wrap:wrap;gap:8px}
+.pill.priv{color:var(--ink-2)}
+
 @media (prefers-reduced-motion: reduce){
   *{transition:none !important;animation:none !important}
 }
@@ -641,45 +649,96 @@ function normTemplate(t){
   return { id:String(t.id), name:String(t.name || 'Modèle').slice(0,40), ts:Number(t.ts) || 0,
     items:(Array.isArray(t.items) ? t.items : []).filter(i => i && i.name).slice(0,200).map(i => ({ name:String(i.name).slice(0,60), qty:Math.max(1, parseInt(i.qty,10) || 1), rayon:RAYONS.includes(i.rayon) ? i.rayon : 'Autre' })) };
 }
+function mergeEntry(c, e){
+  const cmp = (x,y) => parseInt(x,10) - parseInt(y,10);
+  c.dates = [...new Set([...c.dates, ...e.dates])].sort((a,b) => a - b).slice(-HCAP);
+  c.adds = [...new Set([...c.adds, ...e.adds])].sort(cmp).slice(-HCAP);
+  c.px = [...new Set([...c.px, ...e.px])].sort(cmp).slice(-HCAP);
+  if (!c.lastPrice) c.lastPrice = e.lastPrice;
+  const ex = q => q && (q.src === 'scan' || q.src === 'manuel');
+  if (e.q && (!c.q || (ex(e.q) && !ex(c.q)))) c.q = e.q;
+}
+function mergeParts(hp){
+  const m = {};
+  Object.keys(hp).sort().forEach(sp => {
+    for (const [k,e] of Object.entries(hp[sp])){
+      if (!m[k]) m[k] = { ...e, dates:e.dates.slice(), adds:e.adds.slice(), px:e.px.slice() };
+      else mergeEntry(m[k], e);
+    }
+  });
+  return m;
+}
+function renamePrivateDefaults(st){
+  st.lists.filter(l => !l.space && l.id === 'main').forEach(l => {
+    const nid = uid();
+    st.items.forEach(i => { if (i.listId === 'main' && !i.space) i.listId = nid; });
+    if (st.cur === 'main') st.cur = nid;
+    l.id = nid;
+  });
+  st.groups.filter(g => !g.space && g.id === 'main').forEach(g => {
+    const nid = uid();
+    st.expenses.forEach(e => { if (e.groupId === 'main' && !e.space) e.groupId = nid; });
+    if (st.curGroup === 'main') st.curGroup = nid;
+    g.id = nid;
+  });
+}
 function normalizeState(s){
-  const o = { items:[], history:{}, dismissed:{}, order:RAYONS.slice(), share:null, me:'', folders:[], lists:[], cur:'main', collapsed:{},
-    people:[], expenses:[], meId:'', expCat:'all', groups:[], curGroup:'main', templates:[], barcodes:{}, statRange:'90', hintBackup:false, qMiss:{} };
-  const defList = { id:'main', name:'Courses', folderId:null, ts:0 };
-  const defGroup = { id:'main', name:'Général', ts:0 };
+  const o = { items:[], history:{}, hp:{}, dismissed:{}, order:RAYONS.slice(), me:'', folders:[], lists:[], cur:'main', collapsed:{},
+    people:[], expenses:[], meIds:{}, expCat:'all', groups:[], curGroup:'main', templates:[], barcodes:{}, statRange:'90', hintBackup:false, qMiss:{}, spaces:[], boot:{}, relay:'', searchBlocked:0 };
+  const defList = { id:'main', name:'Courses', folderId:null, space:'', ts:0 };
+  const defGroup = { id:'main', name:'Général', space:'', ts:0 };
   if (s && typeof s === 'object'){
+    const okCode = c => typeof c === 'string' && /^[A-HJKMNP-Z2-9]{10}$/.test(c);
+    if (Array.isArray(s.spaces)) o.spaces = s.spaces.filter(x => x && okCode(x.code)).map(x => ({ code:x.code, name:String(x.name || 'Espace').slice(0,40) }));
+    let legacy = '';
+    if (!o.spaces.length && s.share && okCode(s.share.code)){ legacy = s.share.code; o.spaces = [{ code:legacy, name:'Foyer' }]; o.boot[legacy] = { lists:true, groups:true }; }
+    if (s.boot && typeof s.boot === 'object') for (const [c,v] of Object.entries(s.boot)) if (o.spaces.some(x => x.code === c) && v) o.boot[c] = { lists:!!v.lists, groups:!!v.groups };
+    const tag = v => (typeof v === 'string' && o.spaces.some(x => x.code === v)) ? v : (v === undefined ? legacy : '');
     if (Array.isArray(s.folders)) o.folders = s.folders.filter(f => f && f.id && f.name).map(f => ({ id:String(f.id), name:String(f.name).slice(0,40), ts:Number(f.ts) || 0 }));
     if (Array.isArray(s.lists)) o.lists = s.lists.filter(l => l && l.id && l.name).map(l => ({
-      id:String(l.id), name:String(l.name).slice(0,40),
+      id:String(l.id), name:String(l.name).slice(0,40), space:tag(l.space),
       folderId:(l.folderId && o.folders.some(f => f.id === l.folderId)) ? String(l.folderId) : null, ts:Number(l.ts) || 0 }));
-    if (!o.lists.length) o.lists = [defList];
+    if (!o.lists.length) o.lists = [{ ...defList, space:legacy }];
     o.cur = o.lists.some(l => l.id === s.cur) ? s.cur : o.lists[0].id;
     if (s.collapsed && typeof s.collapsed === 'object') o.collapsed = s.collapsed;
-    if (Array.isArray(s.groups)) o.groups = s.groups.filter(g => g && g.id && g.name).map(g => ({ id:String(g.id), name:String(g.name).slice(0,40), ts:Number(g.ts) || 0 }));
-    if (!o.groups.length) o.groups = [defGroup];
+    if (Array.isArray(s.groups)) o.groups = s.groups.filter(g => g && g.id && g.name).map(g => ({ id:String(g.id), name:String(g.name).slice(0,40), space:tag(g.space), ts:Number(g.ts) || 0 }));
+    if (!o.groups.length) o.groups = [{ ...defGroup, space:legacy }];
     o.curGroup = o.groups.some(g => g.id === s.curGroup) ? s.curGroup : o.groups[0].id;
-    if (Array.isArray(s.people)) o.people = s.people.filter(p => p && p.id && p.name).map(p => ({ id:String(p.id), name:String(p.name).slice(0,30), ts:Number(p.ts) || 0 }));
-    if (Array.isArray(s.expenses)) o.expenses = s.expenses.filter(e => e && e.id).map(normExpense).map(e => ({ ...e, groupId:o.groups.some(g => g.id === e.groupId) ? e.groupId : o.groups[0].id }));
-    if (typeof s.meId === 'string' && o.people.some(p => p.id === s.meId)) o.meId = s.meId;
+    if (Array.isArray(s.people)) o.people = s.people.filter(p => p && p.id && p.name).map(p => ({ id:String(p.id), name:String(p.name).slice(0,30), space:tag(p.space), ts:Number(p.ts) || 0 }));
+    if (Array.isArray(s.expenses)) o.expenses = s.expenses.filter(e => e && e.id).map(normExpense).map(e => {
+      const g = o.groups.find(x => x.id === e.groupId) || o.groups[0];
+      return { ...e, groupId:g.id, space:g.space };
+    });
+    if (s.meIds && typeof s.meIds === 'object') for (const [sp,id] of Object.entries(s.meIds)) if (o.people.some(p => p.id === id && p.space === sp)) o.meIds[sp] = id;
+    if (typeof s.meId === 'string' && o.people.some(p => p.id === s.meId) && !Object.keys(o.meIds).length){ const pp = o.people.find(p => p.id === s.meId); o.meIds[pp.space] = s.meId; }
     if (s.expCat === 'all' || CATS.includes(s.expCat)) o.expCat = s.expCat;
     if (Array.isArray(s.templates)) o.templates = s.templates.filter(t => t && t.id).map(normTemplate);
     if (s.barcodes && typeof s.barcodes === 'object') for (const [c,n] of Object.entries(s.barcodes)) if (/^\d{6,14}$/.test(c) && typeof n === 'string') o.barcodes[c] = n.slice(0,60);
     if (['30','90','365','all'].includes(s.statRange)) o.statRange = s.statRange;
     o.hintBackup = !!s.hintBackup;
+    if (typeof s.relay === 'string' && /^https:\/\/[^\s]{4,200}$/.test(s.relay)) o.relay = s.relay;
+    o.searchBlocked = Number(s.searchBlocked) > 0 ? Number(s.searchBlocked) : 0;
     if (s.qMiss && typeof s.qMiss === 'object') for (const [k,t] of Object.entries(s.qMiss)) if (Number(t) > 0) o.qMiss[k] = Number(t);
     if (Array.isArray(s.items)){
-      o.items = s.items.filter(i => i && i.name && i.id).map(i => ({
-        id:String(i.id), name:String(i.name), key:norm(i.name),
-        listId:o.lists.some(l => l.id === i.listId) ? i.listId : o.lists[0].id,
-        rayon:RAYONS.includes(i.rayon) ? i.rayon : 'Autre',
-        qty:Math.max(1, parseInt(i.qty,10) || 1), price:Math.max(0, Math.round(Number(i.price) || 0)),
-        done:!!i.done, doneTs:i.doneTs || null, ts:Number(i.ts) || 0, by:String(i.by || '').slice(0,20)
-      }));
+      o.items = s.items.filter(i => i && i.name && i.id).map(i => {
+        const l = o.lists.find(x => x.id === i.listId) || o.lists[0];
+        return { id:String(i.id), name:String(i.name), key:norm(i.name), listId:l.id, space:l.space,
+          rayon:RAYONS.includes(i.rayon) ? i.rayon : 'Autre',
+          qty:Math.max(1, parseInt(i.qty,10) || 1), price:Math.max(0, Math.round(Number(i.price) || 0)),
+          done:!!i.done, doneTs:i.doneTs || null, ts:Number(i.ts) || 0, by:String(i.by || '').slice(0,20) };
+      });
     }
-    if (s.history && typeof s.history === 'object'){
-      for (const [k,h] of Object.entries(s.history)) if (h && h.name) o.history[k] = normHist(h);
+    if (s.hp && typeof s.hp === 'object'){
+      for (const [sp, part] of Object.entries(s.hp)){
+        if (sp !== '' && !o.spaces.some(x => x.code === sp)) continue;
+        o.hp[sp] = {};
+        if (part && typeof part === 'object') for (const [k,h] of Object.entries(part)) if (h && h.name) o.hp[sp][k] = normHist(h);
+      }
+    } else if (s.history && typeof s.history === 'object'){
+      o.hp[legacy] = {};
+      for (const [k,h] of Object.entries(s.history)) if (h && h.name) o.hp[legacy][k] = normHist(h);
     }
     if (s.dismissed && typeof s.dismissed === 'object') o.dismissed = s.dismissed;
-    if (s.share && typeof s.share.code === 'string' && /^[A-HJKMNP-Z2-9]{10}$/.test(s.share.code)) o.share = { code:s.share.code };
     if (typeof s.me === 'string') o.me = s.me.slice(0,20);
     if (Array.isArray(s.order)){
       const ord = [...new Set(s.order.filter(r => RAYONS.includes(r)))];
@@ -689,18 +748,47 @@ function normalizeState(s){
   } else {
     o.lists = [defList]; o.groups = [defGroup];
   }
+  if (!o.hp['']) o.hp[''] = {};
+  if (o.spaces.length) renamePrivateDefaults(o);
+  o.history = mergeParts(o.hp);
   return o;
 }
 function load(){
   try { const raw = localStorage.getItem(KEY); if (raw) return normalizeState(JSON.parse(raw)); } catch(e){}
   return normalizeState({});
 }
-function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(state, (k,v) => k === 'history' ? undefined : v)); } catch(e){} }
 
 let state = load();
 let tab = 'list';
 let lastAdded = null;
 let manualRayon = false;
+
+/* ---------- Espaces de partage et historique par espace ---------- */
+const isShared = () => state.spaces.length > 0;
+const listById = id => state.lists.find(l => l.id === id);
+const inLid = (i, id) => { const l = listById(id); return i.listId === id && (!l || (i.space || '') === (l.space || '')); };
+const inCur = i => inLid(i, state.cur);
+const spaceName = sp => sp ? ((state.spaces.find(x => x.code === sp) || {}).name || 'Espace') : 'Privé';
+const spaceOfList = id => (state.lists.find(l => l.id === id) || {}).space || '';
+const peopleOf = sp => state.people.filter(p => (p.space || '') === (sp || ''));
+const myIdFor = sp => { const id = state.meIds[sp || '']; return peopleOf(sp).some(p => p.id === id) ? id : ''; };
+function hpart(sp){ sp = sp || ''; return state.hp[sp] || (state.hp[sp] = {}); }
+function hEntry(sp, key, name, rayon){ const e = hpart(sp)[key] || (hpart(sp)[key] = newHist(name, rayon)); if (rayon) e.rayon = rayon; return e; }
+function rebuildHistory(){ state.history = mergeParts(state.hp); }
+// Applique une qualité (ou l'efface) à tous les endroits où le produit est connu.
+function hSetQ(key, q, fallbackItem){
+  const nq = normQ(q);
+  let touched = false;
+  Object.entries(state.hp).forEach(([sp, part]) => { if (part[key]){ part[key].q = nq; touched = true; pushHistQ(sp, key, part[key]); } });
+  if (!touched){
+    const it = fallbackItem || state.items.find(i => i.key === key);
+    if (!it) return false;
+    const e = hEntry(it.space || '', key, it.name, it.rayon); e.q = nq; pushHistQ(it.space || '', key, e);
+  }
+  rebuildHistory();
+  return true;
+}
 
 /* ---------- Rayons ---------- */
 function guessRayon(name){
@@ -752,18 +840,19 @@ function parseEntry(t){
   return { name:name.trim(), qty:Math.max(1, qty) };
 }
 function newHist(name, rayon){ return { name, rayon, dates:[], adds:[], px:[], lastPrice:0, q:null }; }
-function recordAdd(key, name, rayon){
-  const h = state.history[key] || (state.history[key] = newHist(name, rayon));
+function recordAdd(key, name, rayon, sp){
+  const h = hEntry(sp, key, name, rayon);
   const e = Date.now() + '|' + (state.me || '');
   h.adds.push(e); h.adds = h.adds.slice(-HCAP);
-  pushHistAdd(key, h, e);
+  pushHistAdd(sp, key, h, e);
+  rebuildHistory();
 }
 function addItem(name, rayon, qty){
   name = cap((name || '').trim());
   if (!name) return false;
   const key = norm(name);
   qty = qty || 1;
-  const ex = state.items.find(i => i.key === key && !i.done && i.listId === state.cur);
+  const ex = state.items.find(i => i.key === key && !i.done && inCur(i));
   if (ex){
     ex.qty += qty;
     lastAdded = ex.id;
@@ -771,22 +860,22 @@ function addItem(name, rayon, qty){
     toast(ex.name + ' : quantité portée à ' + ex.qty);
   } else {
     const rz = rayon || guessRayon(name);
+    const sp = spaceOfList(state.cur);
     const it = { id:uid(), name:(state.history[key] ? state.history[key].name : name), key, rayon:rz, qty,
-      price:(state.history[key] && state.history[key].lastPrice) || 0, done:false, doneTs:null, ts:Date.now(), by:state.me || '', listId:state.cur };
+      price:(state.history[key] && state.history[key].lastPrice) || 0, done:false, doneTs:null, ts:Date.now(), by:state.me || '', listId:state.cur, space:sp };
     state.items.push(it);
     lastAdded = it.id;
     pushItem(it);
-    recordAdd(key, it.name, rz);
-    if (!state.history[key].q && rz !== FRESH) queueQuality([key]);
+    recordAdd(key, it.name, rz, sp);
+    if (!state.history[key].q && rz !== FRESH){
+      const lm = localMatch(key);
+      if (lm) hSetQ(key, lm); else queueQuality([key]);
+    }
   }
   save();
   return true;
 }
-function ensureHist(it){
-  const h = state.history[it.key] || (state.history[it.key] = newHist(it.name, it.rayon));
-  h.rayon = it.rayon;
-  return h;
-}
+function ensureHist(it){ return hEntry(it.space || '', it.key, it.name, it.rayon); }
 function toggle(id){
   const it = state.items.find(i => i.id === id);
   if (!it) return;
@@ -806,9 +895,10 @@ function toggle(id){
     const pxe = h.px.find(x => x.startsWith(ts + '|')) || null;
     if (pxe) h.px = h.px.filter(x => x !== pxe);
     it.doneTs = null;
-    if (!h.dates.length && !h.adds.length){ delete state.history[it.key]; delHist(it.key); }
+    if (!h.dates.length && !h.adds.length){ delete hpart(it.space)[it.key]; delHist(it.space, it.key); }
     else pushHistDate(it, ts, false, pxe);
   }
+  rebuildHistory();
   pushItem(it);
   save(); render();
 }
@@ -816,17 +906,18 @@ function removeItem(id){
   const idx = state.items.findIndex(i => i.id === id);
   if (idx < 0) return;
   const [it] = state.items.splice(idx, 1);
-  delItem(it.id);
+  delItem(it);
   save(); render();
   toast(it.name + ' retiré', 'Annuler', () => { state.items.splice(Math.min(idx, state.items.length), 0, it); pushItem(it); save(); render(); });
 }
 
 /* ---------- Affichage ---------- */
 const curList = () => state.lists.find(l => l.id === state.cur) || state.lists[0];
-const curItems = () => state.items.filter(i => i.listId === state.cur);
+const curItems = () => state.items.filter(i => inCur(i));
 const doneTotal = () => curItems().filter(i => i.done).reduce((a,i) => a + (i.price || 0) * i.qty, 0);
-function pillHtml(){
-  const st = shareStatus();
+function pillHtml(sp){
+  if (!isShared()) return '';
+  const st = sp === undefined ? shareStatus() : (sp ? shareStatus(sp) : { t:'Privé', k:'priv' });
   return st ? '<span class="pill ' + st.k + '">' + esc(st.t) + '</span>' : '';
 }
 function renderHeader(){
@@ -846,7 +937,7 @@ function renderHeader(){
     const qLine = lq.ns ? '<p class="qline">' + nsBadge(lq.ns, 'sm', lq.exact < lq.n) + '<span><b>Nutri-Score moyen ' + lq.ns.toUpperCase() + '</b>, ' + lq.n + ' sur ' + lq.total + ' ' + plural(lq.total,'article évalué','articles évalués') + (lq.exact ? ' (' + lq.exact + ' scanné' + (lq.exact > 1 ? 's' : '') + ')' : '') + (qBusy ? ', calcul en cours…' : '') + '</span></p>'
       : (qBusy && mine.length ? '<p class="qline"><span>Calcul du Nutri-Score en cours…</span></p>' : '');
     top.innerHTML = '<div class="crumb"><button type="button" class="back" data-act="back" aria-label="Retour à toutes les listes">' + ICON.back + '<span>Listes</span></button>' + (F ? '<span class="crumb-f">' + esc(F.name) + '</span>' : '') + '</div>' +
-      '<div class="hd"><h1>' + esc(L ? L.name : 'Liste') + '</h1>' + pillHtml() + '</div><p class="sub">' + esc(sub) + '</p>' + (estLine ? '<p class="est">' + esc(estLine) + '</p>' : '') + qLine +
+      '<div class="hd"><h1>' + esc(L ? L.name : 'Liste') + '</h1>' + pillHtml(L ? (L.space || '') : '') + '</div><p class="sub">' + esc(sub) + '</p>' + (estLine ? '<p class="est">' + esc(estLine) + '</p>' : '') + qLine +
       (mine.length ? '<div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><i style="width:' + pct + '%"></i></div>' : '');
   } else if (tab === 'lists'){
     const n = state.lists.length, m = state.folders.length;
@@ -854,16 +945,16 @@ function renderHeader(){
   } else if (tab === 'expenses'){
     const spent = state.expenses.filter(e => e.type === 'expense');
     const total = spent.reduce((a,e) => a + e.amt, 0);
-    top.innerHTML = '<div class="hd"><h1>Dépenses</h1>' + pillHtml() + '</div><p class="sub">' + (spent.length ? spent.length + ' ' + plural(spent.length,'dépense','dépenses') + ', ' + eur(total) + ' au total' : 'Partagez les frais, sans prise de tête.') + '</p>';
+    top.innerHTML = '<div class="hd"><h1>Dépenses</h1>' + pillHtml(curGroupObj().space || '') + '</div><p class="sub">' + (spent.length ? spent.length + ' ' + plural(spent.length,'dépense','dépenses') + ', ' + eur(total) + ' au total' : 'Partagez les frais, sans prise de tête.') + '</p>';
   } else if (tab === 'stats'){
     top.innerHTML = '<div class="hd"><h1>Stats</h1>' + pillHtml() + '</div><p class="sub">' + esc(rangeSub()) + '</p>';
   } else {
-    top.innerHTML = '<h1>Réglages</h1><p class="sub">' + (state.share ? 'Tout est partagé entre vos appareils.' : 'Vos données restent sur cet appareil.') + '</p>';
+    top.innerHTML = '<h1>Réglages</h1><p class="sub">' + (isShared() ? 'Chaque liste et chaque groupe de dépenses est privé ou partagé dans un espace.' : 'Vos données restent sur cet appareil.') + '</p>';
   }
 }
 
 function itemHtml(it){
-  const by = (state.share && it.by && it.by !== state.me) ? 'Ajouté par ' + it.by : '';
+  const by = (it.space && it.by && it.by !== state.me) ? 'Ajouté par ' + it.by : '';
   const q = itemQuality(it);
   const badge = q && q.ns ? '<span class="itbadge">' + nsBadge(q.ns, 'sm', !isExact(q)) + '</span>' : '';
   const meta = (it.qty > 1 ? '<span class="qty">×' + it.qty + '</span>' : '') + (it.price ? '<span class="pr">' + esc(eur(it.price * it.qty)) + '</span>' : '') + (by ? '<span class="by">' + esc(by) + '</span>' : '');
@@ -912,21 +1003,22 @@ function listHtml(){
 }
 
 function listRow(l){
-  const its = state.items.filter(i => i.listId === l.id);
+  const its = state.items.filter(i => inLid(i, l.id));
   const open = its.filter(i => !i.done).length;
   const meta = open ? open + ' ' + plural(open,'article','articles') + ' à acheter' : (its.length ? 'Tout est dans le caddie' : 'Liste vide');
   const lq = listQuality(l.id);
+  const spTxt = isShared() ? (l.space ? 'Partagée : ' + spaceName(l.space) : 'Privée') : '';
   const lqText = lq.ns ? 'Nutri-Score moyen ' + lq.ns.toUpperCase() + ', ' + lq.n + ' sur ' + lq.total + ' ' + plural(lq.total,'article évalué','articles évalués') : '';
   return '<li class="lrow"><button type="button" class="lrow-main" data-act="open-list" data-id="' + esc(l.id) + '">' +
-    '<span class="ltxt"><span class="lname">' + esc(l.name) + '</span><span class="lmeta' + (open ? ' has' : '') + '">' + esc(meta) + '</span>' + (lqText ? '<span class="lmeta2">' + esc(lqText) + '</span>' : '') + '</span>' +
+    '<span class="ltxt"><span class="lname">' + esc(l.name) + '</span><span class="lmeta' + (open ? ' has' : '') + '">' + esc(meta) + '</span>' + (spTxt ? '<span class="lmeta2">' + esc(spTxt) + '</span>' : '') + (lqText ? '<span class="lmeta2">' + esc(lqText) + '</span>' : '') + '</span>' +
     (lq.ns ? '<span class="lq">' + nsBadge(lq.ns, '', lq.exact < lq.n) + '</span>' : '') +
     '<span class="lchev">' + ICON.chevR + '</span></button>' +
     '<button type="button" class="rm" data-act="edit-list" data-id="' + esc(l.id) + '" aria-label="Modifier la liste ' + esc(l.name) + '">' + ICON.pencil + '</button></li>';
 }
 function listsHtml(){
   let html = '<div class="actions"><button type="button" class="btn" data-act="new-list">Nouvelle liste</button><button type="button" class="btn soft" data-act="new-folder">Nouveau dossier</button></div>';
-  if (CFG && !state.share && !state.hintBackup){
-    html += '<div class="banner"><b>Sauvegardez vos données</b><p>Aujourd’hui, vos listes ne sont que sur ce téléphone. Créez une liste partagée, même seul(e) : tout est sauvegardé en ligne et se retrouve sur un nouveau téléphone avec un code.</p><div class="row"><button type="button" class="btn" data-act="backup-go">Activer la sauvegarde</button><button type="button" class="btn soft" data-act="backup-later">Plus tard</button></div></div>';
+  if (CFG && !isShared() && !state.hintBackup){
+    html += '<div class="banner"><b>Sauvegardez vos données</b><p>Aujourd’hui, vos listes ne sont que sur ce téléphone. Créez un espace de partage, même seul(e) : ce que vous y mettez est sauvegardé en ligne et se retrouve sur un nouveau téléphone avec son code.</p><div class="row"><button type="button" class="btn" data-act="backup-go">Activer la sauvegarde</button><button type="button" class="btn soft" data-act="backup-later">Plus tard</button></div></div>';
   }
   const loose = state.lists.filter(l => !l.folderId);
   if (loose.length){
@@ -951,10 +1043,10 @@ function historyHtml(){
     .sort((a,b) => b.last - a.last);
   if (!rows.length){
     return '<div class="empty"><b>Pas encore d’historique</b>Chaque article coché en magasin est enregistré. Après deux achats d’un même produit, Caddie estime à quel rythme vous le rachetez.' +
-      (state.share ? '' : '<br><button type="button" class="btn" style="margin-top:14px" data-act="demo">Charger un exemple pour essayer</button>') + '</div>';
+      (isShared() ? '' : '<br><button type="button" class="btn" style="margin-top:14px" data-act="demo">Charger un exemple pour essayer</button>') + '</div>';
   }
   return '<ul class="list" style="margin-top:8px">' + rows.map(({k,h,s,last}) => {
-    const onList = state.items.some(i => i.key === k && !i.done && i.listId === state.cur);
+    const onList = state.items.some(i => i.key === k && !i.done && inCur(i));
     const n = h.dates.length;
     let line = 'Acheté ' + n + ' ' + plural(n,'fois','fois') + (s ? ', en général ' + everyText(s.avg) : '') + '. Dernier achat : ' + agoText((Date.now() - last) / DAY) + '.';
     return '<li class="hrow"><div class="txt"><div class="t">' + esc(h.name) + '</div><div class="r">' + esc(h.rayon) + '</div><div class="d">' + esc(line) + '</div></div>' +
@@ -1037,7 +1129,7 @@ function statsHtml(){
   const rows = Object.values(state.history).some(x => x.dates.length);
   if (!buys.length && !adds.length && !exps.length){
     h += '<div class="empty"><b>Pas encore de statistiques</b>Ajoutez des articles à vos listes et cochez-les en magasin : Caddie affichera ici ce que vous achetez le plus, quand, et combien ça coûte.' +
-      (state.share ? '' : '<br><button type="button" class="btn" style="margin-top:14px" data-act="demo">Charger des données d’exemple</button>') + '</div>';
+      (isShared() ? '' : '<br><button type="button" class="btn" style="margin-top:14px" data-act="demo">Charger des données d’exemple</button>') + '</div>';
     return h + (rows ? historyBlock() : '');
   }
   const spentCents = exps.reduce((a,e) => a + e.amt, 0) || buys.reduce((a,e) => a + e.cents, 0);
@@ -1078,7 +1170,7 @@ function statsHtml(){
   const named = adds.filter(e => e.by);
   if (named.length){
     h += chartCard('Qui remplit la liste ?', 'Articles ajoutés, par personne', hbars(countBy(named, e => e.by, e => e.by).slice(0, 6), v => v + ' ajouts', '#FFB86B'));
-  } else if (adds.length && state.share){
+  } else if (adds.length && isShared()){
     h += chartCard('Qui remplit la liste ?', '', '<p class="none">Renseignez votre prénom dans Réglages pour voir qui ajoute quoi.</p>');
   }
 
@@ -1132,7 +1224,7 @@ const qctx = () => QCTX || (QCTX = { avgs:rayonAverages() });
 const isExact = q => q && (q.src === 'scan' || q.src === 'manuel');
 function itemQuality(it){ const h = state.history[it.key]; return h ? effQuality(h, qctx().avgs) : null; }
 function listQuality(listId){
-  const its = state.items.filter(i => i.listId === listId);
+  const its = state.items.filter(i => inLid(i, listId));
   let sum = 0, n = 0, exact = 0, ev = 0;
   its.forEach(i => {
     const q = itemQuality(i);
@@ -1177,7 +1269,9 @@ function nameVariants(name){
 }
 async function offSearch(term, mode){
   const F = 'code,product_name,nutriscore_grade,nova_group';
-  const url = mode === 'sal'
+  const url = mode === 'relay'
+    ? state.relay + (state.relay.includes('?') ? '&' : '?') + 'q=' + encodeURIComponent(term)
+    : mode === 'sal'
     ? 'https://search.openfoodfacts.org/search?q=' + encodeURIComponent(term) + '&langs=fr&page_size=24&fields=' + F
     : 'https://world.openfoodfacts.org/cgi/search.pl?search_terms=' + encodeURIComponent(term) + '&search_simple=1&action=process&json=1&page_size=24&sort_by=unique_scans_n' +
       (mode === 'fr' ? '&tagtype_0=countries&tag_contains_0=contains&tag_0=france' : '') + '&fields=' + F;
@@ -1198,9 +1292,13 @@ function analyse(list){
 async function offMatch(name){
   const v = nameVariants(name);
   const alt = v[1] !== v[0] ? v[1] : (v[2] !== v[0] ? v[2] : null);
-  const tries = [[v[0], 'sal'], [v[0], 'fr']];
-  if (alt) tries.push([alt, 'sal']);
-  tries.push([v[0], 'world']);
+  let tries;
+  if (state.relay){ tries = [[v[0], 'relay']]; if (alt) tries.push([alt, 'relay']); }
+  else {
+    tries = [[v[0], 'sal'], [v[0], 'fr']];
+    if (alt) tries.push([alt, 'sal']);
+    tries.push([v[0], 'world']);
+  }
   let anyOk = false, why = '', errs = 0;
   for (let i = 0; i < tries.length && !qCancel; i++){
     if (i > 0) await sleep(Q_DELAY);
@@ -1212,10 +1310,43 @@ async function offMatch(name){
   }
   return { r:null, err:!anyOk, why };
 }
+const STOPW = new Set(['de','du','des','la','le','les','au','aux','a','et','en','un','une','l','d','pour','sans','avec','bio','nature']);
+function nameTokens(name){
+  return norm(name).split(/[^a-z0-9]+/).filter(w => w && !STOPW.has(w) && !/^\d+$/.test(w)).map(w => w.replace(/(s|x)$/, ''));
+}
+// Cherche, parmi VOS produits déjà évalués de façon sûre (scannés ou corrigés), ceux dont le nom ressemble.
+function localMatch(key){
+  const h = state.history[key]; if (!h) return null;
+  const tk = nameTokens(h.name); if (!tk.length) return null;
+  const refs = [];
+  Object.entries(state.history).forEach(([k,e]) => {
+    if (k === key || !e.q || !(e.q.src === 'scan' || e.q.src === 'manuel') || !(e.q.ns || e.q.nova)) return;
+    const rt = nameTokens(e.name), rs = new Set(rt);
+    const forward = tk.every(t => rs.has(t));
+    const backward = rt.length >= 2 && rt.every(t => tk.includes(t));
+    if (forward || backward) refs.push(e);
+  });
+  if (!refs.length) return null;
+  const gs = refs.map(e => NS.indexOf(e.q.ns)).filter(i => i >= 0);
+  const nv = refs.map(e => e.q.nova).filter(n => n >= 1 && n <= 4);
+  if (!gs.length && !nv.length) return null;
+  return { ns:gs.length ? NS[median(gs)] : '', nova:nv.length ? median(nv) : 0, src:'match', ref:('votre produit « ' + refs[0].name + ' »').slice(0,60) };
+}
+function refreshLocalMatches(){
+  let n = 0;
+  Object.entries(state.history).forEach(([k,h]) => {
+    if (h.q || h.rayon === FRESH || !(h.dates.length || h.adds.length)) return;
+    const lm = localMatch(k);
+    if (lm){ hSetQ(k, lm); n++; }
+  });
+  return n;
+}
 const softRender = () => { if (['list','lists','stats'].includes(tab)) render(); };
 function listQueueKeys(listId){
-  const its = state.items.filter(i => i.listId === listId && !i.done);
-  its.forEach(i => { if (!state.history[i.key]) state.history[i.key] = newHist(i.name, i.rayon); });
+  const its = state.items.filter(i => inLid(i, listId) && !i.done);
+  let made = false;
+  its.forEach(i => { if (!state.history[i.key]){ hEntry(i.space || '', i.key, i.name, i.rayon); made = true; } });
+  if (made) rebuildHistory();
   return [...new Set(its.map(i => i.key))].filter(k => {
     const h = state.history[k];
     return h && !h.q && h.rayon !== FRESH && !qQueue.includes(k) && !(state.qMiss[k] && Date.now() - state.qMiss[k] < 3 * DAY);
@@ -1235,11 +1366,14 @@ async function runQQueue(){
   while (qQueue.length && !qCancel && navigator.onLine){
     const k = qQueue.shift(), h = state.history[k];
     if (!h || h.q || h.rayon === FRESH) continue;
+    const lm = localMatch(k);
+    if (lm){ hSetQ(k, lm); delete state.qMiss[k]; st.found++; st.done++; save(); softRender(); continue; }
+    if (!qVerbose && !state.relay && Date.now() < state.searchBlocked){ st.done++; continue; }
     if (qVerbose) toast('Estimation ' + (st.done + 1) + '/' + total0 + ' : ' + h.name);
     const { r, err, why } = await offMatch(h.name);
     st.done++;
-    if (r && state.history[k]){ state.history[k].q = normQ(r); delete state.qMiss[k]; pushHistQ(k, state.history[k]); st.found++; }
-    else if (err){ st.err++; st.why = st.why || why; qDownUntil = Date.now() + 120000; qQueue.length = 0; }
+    if (r && state.history[k]){ hSetQ(k, r); delete state.qMiss[k]; st.found++; }
+    else if (err){ st.err++; st.why = st.why || why; qDownUntil = Date.now() + 120000; qQueue.length = 0; if (/bloquée/.test(why || '') && !state.relay) state.searchBlocked = Date.now() + 24 * 3600 * 1000; }
     else { state.qMiss[k] = Date.now(); st.miss++; }
     save(); softRender();
     if (qQueue.length && !qCancel) await sleep(Q_DELAY);
@@ -1248,7 +1382,7 @@ async function runQQueue(){
   qRunning = false; qBusy = false; qCancel = false;
   if (qVerbose && st.done){
     toast(stopped ? 'Estimation arrêtée'
-      : st.err === st.done ? 'Open Food Facts ne répond pas (' + (st.why || 'connexion') + '). Faites le test dans Réglages > Open Food Facts.'
+      : st.err === st.done && st.found === 0 ? 'La recherche par nom est bloquée (' + (st.why || 'connexion') + '). Caddie utilise vos produits déjà scannés et la moyenne du rayon. Détails dans Réglages > Open Food Facts.'
       : st.found + ' ' + plural(st.found,'produit trouvé','produits trouvés') + ' sur ' + st.done + (st.miss ? '. ' + st.miss + ' sans correspondance : touchez-les pour les noter vous-même.' : '.'));
   }
   qVerbose = false;
@@ -1265,6 +1399,7 @@ async function diagOff(){
     ['Recherche rapide', 'https://search.openfoodfacts.org/search?q=lait&langs=fr&page_size=3&fields=' + F, 12000],
     ['Recherche classique', 'https://world.openfoodfacts.org/cgi/search.pl?search_terms=lait&search_simple=1&action=process&json=1&page_size=3&tagtype_0=countries&tag_contains_0=contains&tag_0=france&fields=' + F, 20000]
   ];
+  if (state.relay) tests.push(['Votre relais', state.relay + (state.relay.includes('?') ? '&' : '?') + 'q=lait', 15000]);
   const out = [];
   for (const [label, url, ms] of tests){
     const t0 = Date.now();
@@ -1277,6 +1412,11 @@ async function diagOff(){
   }
   const box = $('#diagout'); if (!box) return;
   const good = out.filter(o => o.ok).length, blocked = out.every(o => /bloquée/.test(o.err));
+  const prodOk = out[0].ok, searchBad = !out[1].ok && !out[2].ok && (!state.relay || !out[3].ok);
+  if (prodOk && searchBad){
+    box.innerHTML += '<p style="margin:6px 0 0">Le scan fonctionne, mais les <b>recherches par nom sont bloquées</b> depuis votre navigateur (Open Food Facts ne les autorise pas dans tous les cas). Ce n’est pas grave : Caddie estime alors la qualité à partir de <b>vos produits déjà scannés</b>, puis de la moyenne du rayon. Plus vous scannez, plus les estimations sont justes. Vous pouvez aussi brancher un relais gratuit ci-dessous.</p>';
+    return;
+  }
   box.innerHTML += '<p style="margin:6px 0 0">' + (good === out.length ? 'Tout fonctionne : l’estimation et le scan peuvent utiliser Open Food Facts.'
     : good ? 'Au moins une source répond : Caddie l’utilisera, mais certaines recherches peuvent échouer.'
     : blocked ? 'Aucune réponse. Causes possibles : vous utilisez l’aperçu en ligne (il bloque tout accès externe), un bloqueur de publicités ou de contenu, un réseau limité, ou un navigateur trop restrictif. Ouvrez Caddie depuis votre site GitHub Pages et réessayez.'
@@ -1293,12 +1433,12 @@ function editQuality(key){
     '<div class="row"><button type="submit" class="btn">Enregistrer</button><button type="button" class="btn soft" data-act="sheet-close">Annuler</button></div>' +
     (h.q ? '<button type="button" class="btn soft" data-act="sheet-delete">Retirer l’évaluation (revenir à l’estimation)</button>' : '') + '</form>';
   el.hidden = false;
-  sheetCfg = { onDelete:() => { closeSheet(); h.q = null; pushHistQ(key, h); save(); render(); toast('Évaluation retirée'); } };
+  sheetCfg = { onDelete:() => { closeSheet(); hSetQ(key, null); save(); render(); toast('Évaluation retirée'); } };
   $('#qform').addEventListener('submit', ev => {
     ev.preventDefault();
     const ns = $('#q-ns').value, nova = parseInt($('#q-nova').value, 10) || 0;
     closeSheet();
-    if (!ns && !nova){ h.q = null; pushHistQ(key, h); save(); render(); return; }
+    if (!ns && !nova){ hSetQ(key, null); save(); render(); return; }
     setQuality(key, { ns, nova, src:'manuel', ref:'' }); render(); toast('Qualité enregistrée');
   });
 }
@@ -1378,22 +1518,28 @@ function clearBox(){
     '<button type="button" class="btn danger" data-act="clr-exp">Effacer toutes les dépenses</button></div></div></div>';
 }
 
-function shareHtml(){
-  let h = '<h2>Sauvegarde et partage</h2><div class="card">';
+function spacesHtml(){
+  let h = '<h2>Espaces de partage</h2><div class="card">';
   if (!CFG){
-    h += '<p>Le partage n’est pas encore activé. Il demande de brancher un service gratuit (Firebase) : suivez le guide, puis remplissez le fichier <b>firebase-config.js</b>.</p>';
-  } else if (!state.share){
-    h += '<p>Créez une liste partagée, même si vous êtes seul(e) : vos listes, dépenses et historique sont sauvegardés en ligne et vous les retrouvez sur un nouveau téléphone avec le code. Les personnes qui la rejoignent voient tout en direct, même avec peu de réseau.</p>' +
-      '<div class="row"><button type="button" class="btn" data-act="share-create">Créer une liste partagée</button></div>' +
-      '<p style="margin-top:16px">Vous avez reçu un code ?</p>' +
-      '<div class="join"><input id="joincode" class="field" type="text" placeholder="XXXXX-XXXXX" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Code de partage"><button type="button" class="btn" data-act="share-join">Rejoindre</button></div>';
-  } else {
-    h += '<p>Code de votre liste partagée</p><div class="code">' + esc(fmtCode(state.share.code)) + '</div>' +
-      '<p>Envoyez ce lien ou ce code aux personnes de votre foyer. Quiconque possède le code peut lire et modifier la liste : ne le publiez pas.</p>' +
-      '<div class="row"><button type="button" class="btn" data-act="share-link">Envoyer l’invitation</button><button type="button" class="btn soft" data-act="share-copy">Copier le code</button></div>' +
-      '<p style="margin-top:16px">Votre prénom, pour que les autres voient qui ajoute quoi</p>' +
+    return h + '<p>Le partage n’est pas encore activé. Il demande de brancher un service gratuit (Firebase) : suivez le guide, puis remplissez le fichier <b>firebase-config.js</b>.</p></div>';
+  }
+  h += '<p>Un espace est un petit groupe de personnes qui partagent des listes et des dépenses. Chaque liste ou groupe de dépenses est <b>privé</b> ou placé dans un espace : seuls les membres de cet espace le voient. Même seul(e), un espace sert de sauvegarde en ligne.</p>';
+  state.spaces.forEach(x => {
+    const nl = state.lists.filter(l => l.space === x.code).length, ng = state.groups.filter(g => g.space === x.code).length;
+    h += '<div class="spacerow"><b>' + esc(x.name) + '</b><span class="meta"> ' + nl + ' ' + plural(nl,'liste','listes') + ', ' + ng + ' ' + plural(ng,'groupe de dépenses','groupes de dépenses') + '</span>' +
+      '<div class="code">' + esc(fmtCode(x.code)) + '</div>' +
+      '<div class="row"><button type="button" class="btn" data-act="share-link" data-code="' + esc(x.code) + '">Inviter</button>' +
+      '<button type="button" class="btn soft" data-act="share-copy" data-code="' + esc(x.code) + '">Copier le code</button>' +
+      '<button type="button" class="btn soft" data-act="space-rename" data-code="' + esc(x.code) + '">Renommer</button>' +
+      '<button type="button" class="btn danger" data-act="share-leave" data-code="' + esc(x.code) + '">Quitter</button></div></div>';
+  });
+  h += '<div class="row" style="margin-top:14px"><button type="button" class="btn' + (state.spaces.length ? ' soft' : '') + '" data-act="share-create">Créer un espace</button></div>' +
+    '<p style="margin-top:16px">Vous avez reçu un code ?</p>' +
+    '<div class="join"><input id="joincode" class="field" type="text" placeholder="XXXXX-XXXXX" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Code de l’espace"><button type="button" class="btn" data-act="share-join">Rejoindre</button></div>';
+  if (state.spaces.length){
+    h += '<p style="margin-top:16px">Votre prénom, pour que les autres voient qui ajoute quoi</p>' +
       '<input id="meinput" class="field" type="text" maxlength="20" value="' + esc(state.me) + '" autocomplete="off" aria-label="Votre prénom">' +
-      '<div class="row" style="margin-top:16px"><button type="button" class="btn danger" data-act="share-leave">Quitter le partage</button></div>';
+      '<p style="margin-top:12px">Pour retirer quelqu’un d’un espace, créez un nouvel espace et déplacez-y la liste ou le groupe : l’ancien code n’y donnera plus accès.</p>';
   }
   return h + '</div>';
 }
@@ -1410,16 +1556,18 @@ function settingsHtml(){
     '<ul class="list">' + ord.map((r,i) => '<li class="orow"><span class="nm">' + esc(r) + '</span>' +
       '<button type="button" class="arrow" data-act="up" data-i="' + i + '"' + (i === 0 ? ' disabled' : '') + ' aria-label="Monter ' + esc(r) + '">' + ICON.up + '</button>' +
       '<button type="button" class="arrow" data-act="down" data-i="' + i + '"' + (i === ord.length-1 ? ' disabled' : '') + ' aria-label="Descendre ' + esc(r) + '">' + ICON.down + '</button></li>').join('') + '</ul>' +
-    shareHtml() +
+    spacesHtml() +
     tplHtml() +
-    '<h2>Open Food Facts</h2><div class="card"><p>Sert à retrouver le Nutri-Score des produits (scan et estimation). Si les notes ne se calculent pas, testez la connexion.</p><div class="row"><button type="button" class="btn soft" data-act="diag-off">Tester la connexion</button></div></div>' +
-    (state.share ? '' : '<h2>Tester l’appli</h2><div class="card"><p>Charge des données d’exemple (achats, prix, dépenses) pour voir les suggestions « À prévoir ? » et les statistiques. « Tout effacer » les supprime.</p><div class="row"><button type="button" class="btn" data-act="demo">Charger un exemple</button></div></div>') +
-    '<h2>Statistiques</h2><div class="card"><p>Les statistiques viennent de l’historique d’achats (produits cochés, prix, qualité) et des dépenses. Vous pouvez les remettre à zéro séparément' + (state.share ? ', pour tout le foyer puisque la liste est partagée' : '') + '. Vos listes, vos personnes et vos groupes ne changent pas.</p><div class="row">' +
+    '<h2>Open Food Facts</h2><div class="card"><p>Sert à retrouver le Nutri-Score des produits. Le <b>scan</b> donne la note exacte. Pour les articles non scannés, Caddie les rapproche de vos produits déjà scannés, puis de la moyenne du rayon. Si les notes ne se calculent pas, testez la connexion.</p><div class="row"><button type="button" class="btn soft" data-act="diag-off">Tester la connexion</button></div>' +
+      '<p style="margin-top:16px">Relais de recherche (facultatif, pour les utilisateurs avancés) : l’adresse d’un petit service gratuit qui interroge Open Food Facts à votre place. Le fichier <b>relais-cloudflare.js</b> fourni explique comment le créer.</p>' +
+      '<div class="join"><input id="relay" class="field" type="url" placeholder="https://votre-relais.workers.dev" value="' + esc(state.relay) + '" autocomplete="off" spellcheck="false" aria-label="Adresse du relais" style="text-transform:none;letter-spacing:0"><button type="button" class="btn" data-act="relay-save">Enregistrer</button></div></div>' +
+    (isShared() ? '' : '<h2>Tester l’appli</h2><div class="card"><p>Charge des données d’exemple (achats, prix, dépenses) pour voir les suggestions « À prévoir ? » et les statistiques. « Tout effacer » les supprime.</p><div class="row"><button type="button" class="btn" data-act="demo">Charger un exemple</button></div></div>') +
+    '<h2>Statistiques</h2><div class="card"><p>Les statistiques viennent de l’historique d’achats (produits cochés, prix, qualité) et des dépenses. Vous pouvez les remettre à zéro séparément' + (isShared() ? ', y compris dans vos espaces partagés' : '') + '. Vos listes, vos personnes et vos groupes ne changent pas.</p><div class="row">' +
       '<button type="button" class="btn soft" data-act="clear-history">Effacer l’historique d’achats</button>' +
       '<button type="button" class="btn soft" data-act="clear-expenses">Effacer les dépenses</button></div></div>' +
-    '<h2>Vos données</h2><div class="card"><p>' + (state.share ? 'La liste partagée est conservée en ligne. Vous pouvez exporter une copie de sécurité.' : 'Exportez une copie de sécurité, ou restaurez-en une.') + '</p><div class="row">' +
+    '<h2>Vos données</h2><div class="card"><p>' + (isShared() ? 'Ce qui est dans un espace partagé est conservé en ligne ; le reste reste sur cet appareil. Vous pouvez exporter une copie de sécurité.' : 'Exportez une copie de sécurité, ou restaurez-en une.') + '</p><div class="row">' +
       '<button type="button" class="btn soft" data-act="export">Exporter</button>' +
-      (state.share ? '' : '<button type="button" class="btn soft" data-act="import">Importer</button>') +
+      (isShared() ? '' : '<button type="button" class="btn soft" data-act="import">Importer</button>') +
       '<button type="button" class="btn soft" data-act="export-csv">Dépenses (CSV)</button><button type="button" class="btn soft" data-act="export-buy">Achats (CSV)</button><button type="button" class="btn danger" data-act="reset">Tout effacer</button></div></div>';
 }
 
@@ -1455,7 +1603,7 @@ function candidates(){
   const m = new Map();
   Object.entries(state.history).forEach(([k,h]) => m.set(k, { key:k, name:h.name, rayon:h.rayon }));
   COMMON.forEach(n => { const k = norm(n); if (!m.has(k)) m.set(k, { key:k, name:n, rayon:guessRayon(n) }); });
-  return [...m.values()].filter(c => !state.items.some(i => i.key === c.key && !i.done && i.listId === state.cur));
+  return [...m.values()].filter(c => !state.items.some(i => i.key === c.key && !i.done && inCur(i)));
 }
 function updateTyping(){
   const v = input.value.trim();
@@ -1550,11 +1698,8 @@ async function lookupBarcode(code){
   return { status:'ok', name:String(n).trim().slice(0, 50), ns:/^[a-e]$/.test(pr.nutriscore_grade) ? pr.nutriscore_grade : '', nova:parseInt(pr.nova_group, 10) || 0 };
 }
 function setQuality(key, q){
-  const h = state.history[key]; if (!h) return;
-  h.q = normQ(q);
   delete state.qMiss[key];
-  pushHistQ(key, h);
-  save();
+  if (hSetQ(key, q)){ if (q && (q.src === 'scan' || q.src === 'manuel')) refreshLocalMatches(); save(); }
 }
 // Associe un code-barres à un article de la liste : note exacte, article coché, code mémorisé.
 function applyScan(it, code, info){
@@ -1580,7 +1725,7 @@ function addScanned(code, info){
 function itemCandidates(offName){
   const words = norm(offName).split(/[^a-z0-9]+/).filter(Boolean).map(w => w.replace(/s$/, ''));
   const seen = new Set();
-  return state.items.filter(i => i.listId === state.cur && !i.done).map(i => {
+  return state.items.filter(i => inCur(i) && !i.done).map(i => {
     const toks = i.key.split(/[^a-z0-9]+/).filter(Boolean).map(w => w.replace(/s$/, ''));
     return toks.length && toks.every(t => words.includes(t)) ? { it:i, score:toks.length } : null;
   }).filter(Boolean).sort((a,b) => b.score - a.score).map(x => x.it).filter(i => !seen.has(i.key) && seen.add(i.key)).slice(0, 3);
@@ -1596,7 +1741,7 @@ function chooseItemSheet(code, info, cands){
 async function handleBarcode(code){
   const known = state.barcodes[code];
   if (known){
-    const it = state.items.find(i => i.listId === state.cur && !i.done && i.key === norm(known));
+    const it = state.items.find(i => inCur(i) && !i.done && i.key === norm(known));
     if (it){ applyScan(it, code, null); return; }
   }
   toast('Code ' + code + ', recherche du produit…');
@@ -1664,7 +1809,7 @@ function toast(msg, label, fn){
 /* ---------- Données de démonstration, export, import ---------- */
 const DEMO_Q = { 'Lait':{ ns:'b', nova:1 }, 'Œufs':{ ns:'a', nova:1 }, 'Yaourts':{ ns:'b', nova:3 }, 'Pain de mie':{ ns:'c', nova:4 }, 'Pâtes':{ ns:'a', nova:3 }, 'Poulet':{ ns:'a', nova:1 }, 'Jambon':{ ns:'c', nova:4 }, 'Glace':{ ns:'e', nova:4 }, 'Café':{ ns:'', nova:2 }, 'Eau':{ ns:'a', nova:1 } };
 function loadDemo(){
-  if (state.share) return;
+  if (isShared()) return;
   const demo = [
     ['Lait','Crèmerie',6,7,135],['Œufs','Crèmerie',10,9,320],['Café','Épicerie',21,20,449],
     ['Papier toilette','Hygiène et maison',25,26,599],['Bananes','Fruits et légumes',5,5,189],
@@ -1684,16 +1829,17 @@ function loadDemo(){
       if (i % 4 === 0) adds.push((ts - 2 * DAY) + '|' + (n % 2 ? 'Zoé' : 'Léa'));
     }
     const srt = a => a.sort((x,y) => parseInt(x,10) - parseInt(y,10)).slice(-HCAP);
-    state.history[key] = { name, rayon, dates:dates.sort((a,b) => a - b).slice(-HCAP), px:srt(pxs), adds:srt(adds), lastPrice:px, q:DEMO_Q[name] ? { ...DEMO_Q[name], src:'scan', ref:name } : null };
+    hpart('')[key] = { name, rayon, dates:dates.sort((a,b) => a - b).slice(-HCAP), px:srt(pxs), adds:srt(adds), lastPrice:px, q:DEMO_Q[name] ? { ...DEMO_Q[name], src:'scan', ref:name } : null };
     delete state.dismissed[key];
   });
+  rebuildHistory();
   if (!state.people.length && !state.expenses.length){
     const names = ['Léa','Tom','Zoé'];
-    const ids = names.map((nm, i) => { const pr = { id:uid(), name:nm, ts:now + i }; state.people.push(pr); return pr.id; });
-    state.meId = ids[0]; if (!state.me) state.me = names[0];
-    const voy = { id:uid(), name:'Voyage Italie', ts:now + 5 };
+    const ids = names.map((nm, i) => { const pr = { id:uid(), name:nm, space:'', ts:now + i }; state.people.push(pr); return pr.id; });
+    state.meIds[''] = ids[0]; if (!state.me) state.me = names[0];
+    const voy = { id:uid(), name:'Voyage Italie', space:'', ts:now + 5 };
     state.groups.push(voy);
-    const mk = (ago, title, amt, cat, payer, gid) => state.expenses.push({ id:uid(), title, amt, cat, payerId:ids[payer], shares:ids.slice(), w:{}, type:'expense', toId:'',
+    const mk = (ago, title, amt, cat, payer, gid) => state.expenses.push({ id:uid(), title, amt, cat, payerId:ids[payer], shares:ids.slice(), w:{}, type:'expense', toId:'', space:'',
       groupId:gid || state.groups[0].id, date:dstr(now - ago * DAY), ts:now - ago * DAY, by:'' });
     [[3,'Courses samedi',8420,0],[11,'Courses de la semaine',6735,1],[19,'Courses',9120,0],[27,'Courses',5890,2],[41,'Courses + marché',10450,1],[55,'Courses',7260,0],
      [69,'Courses',8830,2],[84,'Courses',9540,1],[98,'Courses',6410,0],[118,'Courses',7980,2]].forEach(([a,t,m,pay]) => mk(a,t,m,'Courses',pay));
@@ -1703,9 +1849,14 @@ function loadDemo(){
   save(); if (tab !== 'stats') tab = 'list'; render();
   toast('Données d’exemple chargées');
 }
+function clearAllHistory(){
+  Object.entries(state.hp).forEach(([sp, part]) => Object.keys(part).forEach(k => delHist(sp, k)));
+  state.hp = { '':{} };
+  rebuildHistory();
+}
 function exportData(){
   try {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type:'application/json' });
+    const blob = new Blob([JSON.stringify(state, (k,v) => k === 'history' ? undefined : v, 2)], { type:'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'caddie-sauvegarde.json';
@@ -1719,8 +1870,10 @@ $('#file').addEventListener('change', e => {
   const r = new FileReader();
   r.onload = () => {
     try {
-      const s = normalizeState(JSON.parse(r.result));
-      s.share = null;
+      const raw = JSON.parse(r.result);
+      delete raw.spaces; delete raw.share;
+      if (raw.hp && typeof raw.hp === 'object'){ const flat = {}; Object.values(raw.hp).forEach(part => Object.entries(part || {}).forEach(([k,h]) => { if (!flat[k]) flat[k] = h; })); raw.hp = { '':flat }; }
+      const s = normalizeState(raw);
       if (confirm('Remplacer vos données actuelles par cette sauvegarde ?')){ state = s; save(); fillRayonSelect(); render(); toast('Sauvegarde restaurée'); }
     } catch(err){ toast('Ce fichier n’est pas une sauvegarde Caddie valide.'); }
   };
@@ -1732,7 +1885,7 @@ $('#file').addEventListener('change', e => {
 const CFG = (window.CADDIE_FIREBASE && window.CADDIE_FIREBASE.apiKey && window.CADDIE_FIREBASE.projectId) ? window.CADDIE_FIREBASE : null;
 const FB_VERSION = '10.14.1';
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-let fb = null, fbPromise = null, unsubs = [];
+let fb = null, fbPromise = null, unsubs = {};
 const net = { pending:false, cache:false, error:null, connecting:false };
 
 const fmtCode = c => c.slice(0,5) + '-' + c.slice(5);
@@ -1773,54 +1926,57 @@ async function fbLoad(){
   return fbPromise;
 }
 
-const syncing = () => !!(fb && state.share);
-const dref = (name, id) => fb.fs.doc(fb.db, 'households', state.share.code, name, id);
-const colref = name => fb.fs.collection(fb.db, 'households', state.share.code, name);
+const syncing = sp => !!(fb && sp && state.spaces.some(x => x.code === sp));
+const dref = (sp, name, id) => fb.fs.doc(fb.db, 'households', sp, name, id);
+const colref = (sp, name) => fb.fs.collection(fb.db, 'households', sp, name);
 function onErr(e){ net.error = (e && e.code) || 'erreur'; renderHeader(); }
+const put = (sp, name, id, data, opts) => { if (syncing(sp)) (opts ? fb.fs.setDoc(dref(sp, name, id), data, opts) : fb.fs.setDoc(dref(sp, name, id), data)).catch(onErr); };
+const del = (sp, name, id) => { if (syncing(sp)) fb.fs.deleteDoc(dref(sp, name, id)).catch(onErr); };
 
 function itemData(it){
   return { name:it.name, key:it.key, listId:it.listId || 'main', rayon:it.rayon, qty:it.qty, price:it.price || 0, done:!!it.done, doneTs:it.doneTs || null, ts:it.ts || Date.now(), by:it.by || '' };
 }
-function pushItem(it){ if (syncing()) fb.fs.setDoc(dref('items', it.id), itemData(it)).catch(onErr); }
-function pushList(l){ if (syncing()) fb.fs.setDoc(dref('lists', l.id), { name:l.name, folderId:l.folderId || '', ts:l.ts || 0 }).catch(onErr); }
-function delList(id){ if (syncing()) fb.fs.deleteDoc(dref('lists', id)).catch(onErr); }
-function pushFolder(f){ if (syncing()) fb.fs.setDoc(dref('folders', f.id), { name:f.name, ts:f.ts || Date.now() }).catch(onErr); }
-function delFolder(id){ if (syncing()) fb.fs.deleteDoc(dref('folders', id)).catch(onErr); }
-function pushGroup(g){ if (syncing()) fb.fs.setDoc(dref('groups', g.id), { name:g.name, ts:g.ts || 0 }).catch(onErr); }
-function delGroup(id){ if (syncing()) fb.fs.deleteDoc(dref('groups', id)).catch(onErr); }
-function pushPerson(p){ if (syncing()) fb.fs.setDoc(dref('people', p.id), { name:p.name, ts:p.ts || Date.now() }).catch(onErr); }
-function delPerson(id){ if (syncing()) fb.fs.deleteDoc(dref('people', id)).catch(onErr); }
+const listData = l => ({ name:l.name, ts:l.ts || 0 });
+const groupData = g => ({ name:g.name, ts:g.ts || 0 });
+const personData = p => ({ name:p.name, ts:p.ts || Date.now() });
 function expData(e){ return { title:e.title, amt:e.amt, cat:e.cat, payerId:e.payerId, shares:e.shares, w:e.w || {}, groupId:e.groupId || 'main', type:e.type, toId:e.toId || '', date:e.date, ts:e.ts || Date.now(), by:e.by || '' }; }
-function pushExpense(e){ if (syncing()) fb.fs.setDoc(dref('expenses', e.id), expData(e)).catch(onErr); }
-function delExpense(id){ if (syncing()) fb.fs.deleteDoc(dref('expenses', id)).catch(onErr); }
-function delItem(id){ if (syncing()) fb.fs.deleteDoc(dref('items', id)).catch(onErr); }
-function pushHistAdd(key, h, entry){
-  if (!syncing()) return;
-  fb.fs.setDoc(dref('history', hid(key)), { name:h.name, key, rayon:h.rayon, adds:fb.fs.arrayUnion(entry) }, { merge:true }).catch(onErr);
+function histData(k, h){ return { name:h.name, key:k, rayon:h.rayon, dates:h.dates, adds:h.adds || [], px:h.px || [], lastPrice:h.lastPrice || 0, q:h.q || null }; }
+const pushItem = it => put(it.space, 'items', it.id, itemData(it));
+const delItem = it => del(it.space, 'items', it.id);
+const pushList = l => put(l.space, 'lists', l.id, listData(l));
+const delList = l => del(l.space, 'lists', l.id);
+const pushGroup = g => put(g.space, 'groups', g.id, groupData(g));
+const delGroup = g => del(g.space, 'groups', g.id);
+const pushPerson = p => put(p.space, 'people', p.id, personData(p));
+const delPerson = p => del(p.space, 'people', p.id);
+const pushExpense = e => put(e.space, 'expenses', e.id, expData(e));
+const delExpense = e => del(e.space, 'expenses', e.id);
+// Dossiers et modèles restent propres à chaque appareil.
+const pushFolder = () => {}, delFolder = () => {}, pushTemplate = () => {}, delTemplate = () => {};
+function pushHistAdd(sp, key, h, entry){
+  if (!syncing(sp)) return;
+  fb.fs.setDoc(dref(sp, 'history', hid(key)), { name:h.name, key, rayon:h.rayon, adds:fb.fs.arrayUnion(entry) }, { merge:true }).catch(onErr);
 }
 function pushHistDate(it, ts, add, pxe){
-  if (!syncing()) return;
+  if (!syncing(it.space)) return;
   const d = { name:it.name, key:it.key, rayon:it.rayon, dates:add ? fb.fs.arrayUnion(ts) : fb.fs.arrayRemove(ts) };
   if (pxe) d.px = add ? fb.fs.arrayUnion(pxe) : fb.fs.arrayRemove(pxe);
   if (add && it.price) d.lastPrice = it.price;
-  fb.fs.setDoc(dref('history', hid(it.key)), d, { merge:true }).catch(onErr);
+  fb.fs.setDoc(dref(it.space, 'history', hid(it.key)), d, { merge:true }).catch(onErr);
 }
-function histData(k, h){ return { name:h.name, key:k, rayon:h.rayon, dates:h.dates, adds:h.adds || [], px:h.px || [], lastPrice:h.lastPrice || 0, q:h.q || null }; }
-function pushHistQ(k, h){ if (syncing()) fb.fs.setDoc(dref('history', hid(k)), { name:h.name, key:k, rayon:h.rayon, q:h.q || null }, { merge:true }).catch(onErr); }
-function pushHistFull(k, h){ if (syncing()) fb.fs.setDoc(dref('history', hid(k)), histData(k, h)).catch(onErr); }
-function pushTemplate(t){ if (syncing()) fb.fs.setDoc(dref('templates', t.id), { name:t.name, items:t.items, ts:t.ts || Date.now() }).catch(onErr); }
-function delTemplate(id){ if (syncing()) fb.fs.deleteDoc(dref('templates', id)).catch(onErr); }
-function delHist(k){ if (syncing()) fb.fs.deleteDoc(dref('history', hid(k))).catch(onErr); }
-async function pushAll(){
+function pushHistQ(sp, k, h){ put(sp, 'history', hid(k), { name:h.name, key:k, rayon:h.rayon, q:h.q || null }, { merge:true }); }
+function pushHistFull(sp, k, h){ put(sp, 'history', hid(k), histData(k, h)); }
+function delHist(sp, k){ del(sp, 'history', hid(k)); }
+
+// Envoie vers un espace tout ce qui lui appartient.
+async function pushSpaceData(sp){
   const ops = [];
-  state.folders.forEach(f => ops.push([dref('folders', f.id), { name:f.name, ts:f.ts || Date.now() }]));
-  state.lists.forEach(l => ops.push([dref('lists', l.id), { name:l.name, folderId:l.folderId || '', ts:l.ts || 0 }]));
-  state.groups.forEach(g => ops.push([dref('groups', g.id), { name:g.name, ts:g.ts || 0 }]));
-  state.people.forEach(p => ops.push([dref('people', p.id), { name:p.name, ts:p.ts || Date.now() }]));
-  state.expenses.forEach(e => ops.push([dref('expenses', e.id), expData(e)]));
-  state.items.forEach(it => ops.push([dref('items', it.id), itemData(it)]));
-  state.templates.forEach(t => ops.push([dref('templates', t.id), { name:t.name, items:t.items, ts:t.ts || Date.now() }]));
-  Object.entries(state.history).forEach(([k,h]) => ops.push([dref('history', hid(k)), histData(k, h)]));
+  state.lists.filter(l => l.space === sp).forEach(l => ops.push([dref(sp, 'lists', l.id), listData(l)]));
+  state.groups.filter(g => g.space === sp).forEach(g => ops.push([dref(sp, 'groups', g.id), groupData(g)]));
+  state.people.filter(p => p.space === sp).forEach(p => ops.push([dref(sp, 'people', p.id), personData(p)]));
+  state.expenses.filter(e => e.space === sp).forEach(e => ops.push([dref(sp, 'expenses', e.id), expData(e)]));
+  state.items.filter(i => i.space === sp).forEach(it => ops.push([dref(sp, 'items', it.id), itemData(it)]));
+  Object.entries(hpart(sp)).forEach(([k,h]) => ops.push([dref(sp, 'history', hid(k)), histData(k, h)]));
   for (let i = 0; i < ops.length; i += 400){
     const b = fb.fs.writeBatch(fb.db);
     ops.slice(i, i + 400).forEach(([r,d]) => b.set(r, d));
@@ -1828,16 +1984,18 @@ async function pushAll(){
   }
 }
 
-function shareStatus(){
-  if (!state.share) return null;
+function shareStatus(sp){
+  const codes = sp === undefined ? state.spaces.map(x => x.code) : (sp ? [sp] : []);
+  if (!codes.length) return null;
   if (!CFG) return { t:'Partage non configuré', k:'bad' };
   if (net.error) return { t:'Erreur de partage', k:'bad' };
   if (net.connecting || !fb) return { t:'Connexion…', k:'wait' };
   if (!navigator.onLine) return { t:'Hors ligne', k:'wait' };
   if (net.pending) return { t:'Synchronisation…', k:'wait' };
-  return { t:'Partagée', k:'ok' };
+  return { t:sp ? spaceName(sp) : 'Partagé', k:'ok' };
 }
-function stopSync(){ unsubs.forEach(u => { try { u(); } catch(e){} }); unsubs = []; }
+function stopSpace(sp){ (unsubs[sp] || []).forEach(u => { try { u(); } catch(e){} }); delete unsubs[sp]; }
+function stopSync(){ Object.keys(unsubs).forEach(stopSpace); }
 function afterRemote(snap){
   net.pending = snap.metadata.hasPendingWrites;
   net.cache = snap.metadata.fromCache;
@@ -1845,140 +2003,234 @@ function afterRemote(snap){
   save();
   if (tab === 'settings') renderHeader(); else render();
 }
+// Les identifiants « main » (liste et groupe par défaut) peuvent exister à la fois chez vous et dans un espace : on renomme la copie locale.
+function resolveCollisions(kind, sp, ids){
+  state[kind].filter(o => (o.space || '') !== sp && ids.has(o.id)).forEach(o => {
+    const old = o.id, nid = uid();
+    o.id = nid;
+    if (kind === 'lists'){ state.items.forEach(i => { if (i.listId === old && (i.space || '') === (o.space || '')) i.listId = nid; }); if (state.cur === old) state.cur = nid; }
+    else { state.expenses.forEach(e => { if (e.groupId === old && (e.space || '') === (o.space || '')) e.groupId = nid; }); if (state.curGroup === old) state.curGroup = nid; }
+  });
+}
+function pruneDefaults(){
+  state.lists = state.lists.filter(l => !(!l.space && l.ts === 0 && l.name === 'Courses' && state.lists.length > 1 && !state.items.some(i => i.listId === l.id)));
+  state.groups = state.groups.filter(g => !(!g.space && g.ts === 0 && g.name === 'Général' && state.groups.length > 1 && !state.expenses.some(e => e.groupId === g.id) && !peopleOf('').length));
+}
+function ensureBase(){
+  if (!state.lists.length) state.lists.push({ id:uid(), name:'Courses', folderId:null, space:'', ts:Date.now() });
+  if (!state.groups.length) state.groups.push({ id:uid(), name:'Général', space:'', ts:Date.now() });
+  if (!state.lists.some(l => l.id === state.cur)){ state.cur = state.lists[0].id; if (tab === 'list') tab = 'lists'; }
+  if (!state.groups.some(g => g.id === state.curGroup)) state.curGroup = state.groups[0].id;
+}
 async function startSync(){
-  if (!CFG || !state.share) return;
+  if (!CFG || !state.spaces.length) return;
   net.connecting = true; net.error = null; renderHeader();
   try { await fbLoad(); }
   catch(e){ net.connecting = false; net.error = (e && e.code) || 'connexion'; renderHeader(); return; }
   net.connecting = false;
-  stopSync();
-  const code = state.share.code;
-  unsubs.push(fb.fs.onSnapshot(colref('items'), snap => {
-    if (!state.share || state.share.code !== code) return;
-    state.items = snap.docs.map(d => {
-      const x = d.data();
-      return { id:d.id, name:String(x.name || ''), key:norm(x.name || ''), listId:String(x.listId || 'main'), rayon:RAYONS.includes(x.rayon) ? x.rayon : 'Autre',
-        qty:Math.max(1, parseInt(x.qty, 10) || 1), price:Math.max(0, Math.round(Number(x.price) || 0)), done:!!x.done, doneTs:x.doneTs || null, ts:Number(x.ts) || 0, by:String(x.by || '') };
-    }).filter(i => i.name).sort((a,b) => a.ts - b.ts);
-    afterRemote(snap);
-  }, onErr));
-  unsubs.push(fb.fs.onSnapshot(colref('lists'), snap => {
-    if (!state.share || state.share.code !== code) return;
-    const arr = snap.docs.map(d => { const x = d.data(); return { id:d.id, name:String(x.name || 'Liste').slice(0,40), folderId:x.folderId || null, ts:Number(x.ts) || 0 }; })
-      .sort((a,b) => a.ts - b.ts);
-    if (arr.length){ state.lists = arr; }
-    else if (!snap.metadata.fromCache){ state.lists.forEach(pushList); }
-    if (!state.lists.some(l => l.id === state.cur)){ state.cur = state.lists[0].id; if (tab === 'list') tab = 'lists'; }
-    afterRemote(snap);
-  }, onErr));
-  unsubs.push(fb.fs.onSnapshot(colref('groups'), snap => {
-    if (!state.share || state.share.code !== code) return;
-    const arr = snap.docs.map(d => { const x = d.data(); return { id:d.id, name:String(x.name || 'Groupe').slice(0,40), ts:Number(x.ts) || 0 }; })
-      .sort((a,b) => a.ts - b.ts);
-    if (arr.length){ state.groups = arr; }
-    else if (!snap.metadata.fromCache){ state.groups.forEach(pushGroup); }
-    if (!state.groups.some(g => g.id === state.curGroup)) state.curGroup = state.groups[0].id;
-    afterRemote(snap);
-  }, onErr));
-  unsubs.push(fb.fs.onSnapshot(colref('people'), snap => {
-    if (!state.share || state.share.code !== code) return;
-    const arr = snap.docs.map(d => { const x = d.data(); return { id:d.id, name:String(x.name || '').slice(0,30), ts:Number(x.ts) || 0 }; })
-      .filter(p => p.name).sort((a,b) => a.ts - b.ts);
-    if (arr.length || !snap.metadata.fromCache) state.people = arr;
-    if (state.meId && !state.people.some(p => p.id === state.meId)) state.meId = '';
-    afterRemote(snap);
-  }, onErr));
-  unsubs.push(fb.fs.onSnapshot(colref('expenses'), snap => {
-    if (!state.share || state.share.code !== code) return;
-    const arr = snap.docs.map(d => normExpense({ id:d.id, ...d.data() })).sort((a,b) => a.ts - b.ts);
-    if (arr.length || !snap.metadata.fromCache) state.expenses = arr;
-    afterRemote(snap);
-  }, onErr));
-  unsubs.push(fb.fs.onSnapshot(colref('folders'), snap => {
-    if (!state.share || state.share.code !== code) return;
-    const arr = snap.docs.map(d => { const x = d.data(); return { id:d.id, name:String(x.name || 'Dossier').slice(0,40), ts:Number(x.ts) || 0 }; })
-      .sort((a,b) => a.ts - b.ts);
-    if (arr.length || !snap.metadata.fromCache) state.folders = arr;
-    afterRemote(snap);
-  }, onErr));
-  unsubs.push(fb.fs.onSnapshot(colref('history'), snap => {
-    if (!state.share || state.share.code !== code) return;
-    const hist = {};
-    snap.docs.forEach(d => { const x = d.data(); if (x.name) hist[x.key || d.id] = normHist(x); });
-    state.history = hist;
-    afterRemote(snap);
-  }, onErr));
-  unsubs.push(fb.fs.onSnapshot(colref('templates'), snap => {
-    if (!state.share || state.share.code !== code) return;
-    const arr = snap.docs.map(d => normTemplate({ id:d.id, ...d.data() })).sort((a,b) => a.ts - b.ts);
-    if (arr.length || !snap.metadata.fromCache) state.templates = arr;
-    afterRemote(snap);
-  }, onErr));
+  state.spaces.forEach(x => startSpace(x.code));
   renderHeader();
 }
+function startSpace(sp){
+  stopSpace(sp);
+  const live = () => state.spaces.some(x => x.code === sp);
+  const U = unsubs[sp] = [];
+  const mergeRemote = (kind, arr) => {
+    const ids = new Set(arr.map(x => x.id));
+    if (kind === 'lists' || kind === 'groups') resolveCollisions(kind, sp, ids);
+    state[kind] = state[kind].filter(o => !((o.space || '') === sp || (o.leftFrom === sp && ids.has(o.id)))).concat(arr);
+  };
+  U.push(fb.fs.onSnapshot(colref(sp, 'items'), snap => {
+    if (!live()) return;
+    const arr = snap.docs.map(d => {
+      const x = d.data();
+      return { id:d.id, name:String(x.name || ''), key:norm(x.name || ''), listId:String(x.listId || 'main'), space:sp, rayon:RAYONS.includes(x.rayon) ? x.rayon : 'Autre',
+        qty:Math.max(1, parseInt(x.qty, 10) || 1), price:Math.max(0, Math.round(Number(x.price) || 0)), done:!!x.done, doneTs:x.doneTs || null, ts:Number(x.ts) || 0, by:String(x.by || '') };
+    }).filter(i => i.name);
+    mergeRemote('items', arr);
+    state.items.sort((a,b) => a.ts - b.ts);
+    ensureBase(); afterRemote(snap);
+  }, onErr));
+  U.push(fb.fs.onSnapshot(colref(sp, 'lists'), snap => {
+    if (!live()) return;
+    const arr = snap.docs.map(d => { const x = d.data(); const old = state.lists.find(l => l.id === d.id);
+      return { id:d.id, name:String(x.name || 'Liste').slice(0,40), space:sp, folderId:old ? old.folderId : null, ts:Number(x.ts) || 0 }; });
+    if (!snap.metadata.fromCache && state.boot[sp] && state.boot[sp].lists){
+      state.boot[sp].lists = false;
+      if (!arr.length){ state.lists.filter(l => l.space === sp).forEach(pushList); ensureBase(); afterRemote(snap); return; }
+    }
+    if (arr.length || !snap.metadata.fromCache) mergeRemote('lists', arr);
+    if (arr.length) pruneDefaults();
+    ensureBase(); afterRemote(snap);
+  }, onErr));
+  U.push(fb.fs.onSnapshot(colref(sp, 'groups'), snap => {
+    if (!live()) return;
+    const arr = snap.docs.map(d => { const x = d.data(); return { id:d.id, name:String(x.name || 'Groupe').slice(0,40), space:sp, ts:Number(x.ts) || 0 }; });
+    if (!snap.metadata.fromCache && state.boot[sp] && state.boot[sp].groups){
+      state.boot[sp].groups = false;
+      if (!arr.length){ state.groups.filter(g => g.space === sp).forEach(pushGroup); ensureBase(); afterRemote(snap); return; }
+    }
+    if (arr.length || !snap.metadata.fromCache) mergeRemote('groups', arr);
+    if (arr.length) pruneDefaults();
+    ensureBase(); afterRemote(snap);
+  }, onErr));
+  U.push(fb.fs.onSnapshot(colref(sp, 'people'), snap => {
+    if (!live()) return;
+    const arr = snap.docs.map(d => { const x = d.data(); return { id:d.id, name:String(x.name || '').slice(0,30), space:sp, ts:Number(x.ts) || 0 }; }).filter(p => p.name);
+    if (arr.length || !snap.metadata.fromCache) mergeRemote('people', arr);
+    state.people.sort((a,b) => a.ts - b.ts);
+    Object.keys(state.meIds).forEach(k => { if (!state.people.some(p => p.id === state.meIds[k])) delete state.meIds[k]; });
+    afterRemote(snap);
+  }, onErr));
+  U.push(fb.fs.onSnapshot(colref(sp, 'expenses'), snap => {
+    if (!live()) return;
+    const arr = snap.docs.map(d => ({ ...normExpense({ id:d.id, ...d.data() }), space:sp }));
+    if (arr.length || !snap.metadata.fromCache) mergeRemote('expenses', arr);
+    state.expenses.sort((a,b) => a.ts - b.ts);
+    ensureBase(); afterRemote(snap);
+  }, onErr));
+  U.push(fb.fs.onSnapshot(colref(sp, 'history'), snap => {
+    if (!live()) return;
+    const part = {};
+    snap.docs.forEach(d => { const x = d.data(); if (x.name) part[x.key || d.id] = normHist(x); });
+    state.hp[sp] = part;
+    rebuildHistory();
+    afterRemote(snap);
+  }, onErr));
+}
 
-async function createHousehold(){
-  if (!navigator.onLine){ toast('Connectez-vous à internet pour créer le partage.'); return; }
-  toast('Création du partage…');
+async function createSpace(name){
+  if (!navigator.onLine){ toast('Connectez-vous à internet pour créer un espace.'); return; }
+  toast('Création de l’espace…');
   const code = genCode();
   try {
     await fbLoad();
-    await fb.fs.setDoc(fb.fs.doc(fb.db, 'households', code), { createdAt:Date.now() });
-    state.share = { code };
-    await pushAll();
+    await fb.fs.setDoc(fb.fs.doc(fb.db, 'households', code), { name, createdAt:Date.now() });
   } catch(e){
-    state.share = null;
-    toast('Impossible de créer le partage (' + ((e && e.code) || 'erreur') + '). Vérifiez la configuration Firebase.');
-    render();
+    toast('Impossible de créer l’espace (' + ((e && e.code) || 'erreur') + '). Vérifiez la configuration Firebase.');
     return;
   }
+  const first = !state.spaces.length;
+  state.spaces.push({ code, name });
+  hpart(code);
   save();
-  await startSync();
-  render();
-  toast('Liste partagée créée. Envoyez le code à votre foyer.');
+  startSpace(code);
+  const hasPrivate = state.lists.some(l => !l.space) || state.groups.some(g => !g.space);
+  if (first && hasPrivate && confirm('Mettre toutes vos listes, dépenses et votre historique actuels dans « ' + name + ' » ? Choisissez Annuler pour les garder privés et en placer seulement certains plus tard.')){
+    moveAllPrivateTo(code);
+    try { await pushSpaceData(code); } catch(e){ onErr(e); }
+  }
+  save(); render();
+  toast('Espace « ' + name + ' » créé. Envoyez son code aux personnes concernées.');
 }
-async function joinHousehold(raw){
+function moveAllPrivateTo(code){
+  state.lists.forEach(l => { if (!l.space) l.space = code; });
+  state.groups.forEach(g => { if (!g.space) g.space = code; });
+  state.people.forEach(p => { if (!p.space){ p.space = code; } });
+  state.expenses.forEach(e => { if (!e.space) e.space = code; });
+  state.items.forEach(i => { if (!i.space) i.space = code; });
+  if (state.meIds['']){ state.meIds[code] = state.meIds['']; delete state.meIds['']; }
+  const priv = state.hp[''] || {};
+  const dest = hpart(code);
+  Object.entries(priv).forEach(([k,e]) => { if (!dest[k]) dest[k] = e; else mergeEntry(dest[k], e); });
+  state.hp[''] = {};
+  rebuildHistory();
+}
+async function joinSpace(raw){
   const code = cleanCode(raw);
   if (!validCode(code)){ toast('Ce code n’est pas valide : il compte 10 caractères.'); return; }
-  if (state.share && state.share.code === code){ toast('Vous êtes déjà dans ce partage.'); return; }
-  if (!navigator.onLine){ toast('Connectez-vous à internet pour rejoindre un partage.'); return; }
-  toast('Connexion au partage…');
+  if (state.spaces.some(x => x.code === code)){ toast('Vous êtes déjà dans cet espace.'); return; }
+  if (!navigator.onLine){ toast('Connectez-vous à internet pour rejoindre un espace.'); return; }
+  toast('Connexion à l’espace…');
+  let name = 'Espace';
   try {
     await fbLoad();
     const snap = await fb.fs.getDoc(fb.fs.doc(fb.db, 'households', code));
     if (!snap.exists()){ toast('Code introuvable. Vérifiez-le auprès de la personne qui partage.'); return; }
+    const dd = snap.data ? snap.data() : null;
+    name = String((dd && dd.name) || 'Foyer').slice(0,40);
   } catch(e){
     toast('Connexion impossible (' + ((e && e.code) || 'erreur') + '). Vérifiez la configuration Firebase.');
     return;
   }
-  if (state.items.length && !confirm('La liste de cet appareil sera remplacée par la liste partagée. Continuer ?')) return;
-  stopSync();
-  state.share = { code };
-  state.items = []; state.history = {};
-  state.folders = []; state.lists = [{ id:'main', name:'Courses', folderId:null, ts:0 }]; state.cur = 'main'; state.collapsed = {};
-  state.people = []; state.expenses = []; state.meId = ''; state.templates = [];
-  state.groups = [{ id:'main', name:'Général', ts:0 }]; state.curGroup = 'main';
+  renamePrivateDefaults(state);
+  state.spaces.push({ code, name });
+  hpart(code);
   save();
-  await startSync();
+  startSpace(code);
   render();
-  toast('Vous avez rejoint la liste partagée');
+  toast('Vous avez rejoint « ' + name + ' »');
 }
-function leaveHousehold(){
-  if (!confirm('Quitter le partage ? La liste actuelle reste sur cet appareil, mais ne se synchronise plus.')) return;
-  stopSync();
-  state.share = null;
+function leaveSpace(code){
+  const sp = state.spaces.find(x => x.code === code); if (!sp) return;
+  if (!confirm('Quitter l’espace « ' + sp.name + ' » ? Vous en gardez une copie privée sur cet appareil, mais elle ne se synchronise plus et les autres membres ne verront plus vos modifications.')) return;
+  stopSpace(code);
+  ['lists','groups','people','expenses','items'].forEach(k => state[k].forEach(o => { if (o.space === code){ o.space = ''; o.leftFrom = code; } }));
+  if (state.meIds[code]){ state.meIds[''] = state.meIds[code]; delete state.meIds[code]; }
+  const part = state.hp[code] || {};
+  const dest = hpart('');
+  Object.entries(part).forEach(([k,e]) => { if (!dest[k]) dest[k] = e; else mergeEntry(dest[k], e); });
+  delete state.hp[code];
+  state.spaces = state.spaces.filter(x => x.code !== code);
+  rebuildHistory();
   net.pending = false; net.error = null;
   save(); render();
-  toast('Vous avez quitté le partage');
+  toast('Vous avez quitté « ' + sp.name + ' »');
+}
+function renameSpace(code, name){
+  const sp = state.spaces.find(x => x.code === code); if (!sp) return;
+  sp.name = name; save(); render();
+  if (syncing(code)) fb.fs.setDoc(fb.fs.doc(fb.db, 'households', code), { name }, { merge:true }).catch(onErr);
+}
+// Déplace une liste (et ses articles) vers un autre espace, ou vers le privé.
+function moveListToSpace(l0, nsp){
+  const l = listById(l0.id) || l0;
+  const old = l.space || '', dest = nsp || '';
+  if (old === dest) return;
+  const its = state.items.filter(i => inLid(i, l.id));
+  l.space = dest;
+  its.forEach(i => { i.space = dest; });
+  if (old){ del(old, 'lists', l.id); its.forEach(i => del(old, 'items', i.id)); }
+  if (dest){ pushList(l); its.forEach(pushItem); }
+  save(); render();
+  toast('Liste « ' + l.name + ' » : ' + (dest ? 'partagée avec « ' + spaceName(dest) + ' »' : 'maintenant privée'));
+}
+// Déplace un groupe de dépenses : les personnes sont retrouvées par leur prénom dans l'espace d'arrivée, ou créées.
+function moveGroupToSpace(g0, nsp){
+  const g = state.groups.find(x => x.id === g0.id) || g0;
+  const old = g.space || '', dest = nsp || '';
+  if (old === dest) return;
+  const exps = state.expenses.filter(e => e.groupId === g.id && (e.space || '') === old);
+  const ids = new Set();
+  exps.forEach(e => { ids.add(e.payerId); if (e.toId) ids.add(e.toId); e.shares.forEach(x => ids.add(x)); });
+  const map = {};
+  ids.forEach(id => {
+    const p = state.people.find(x => x.id === id && (x.space || '') === old); if (!p) return;
+    let q = peopleOf(dest).find(x => norm(x.name) === norm(p.name));
+    if (!q){ q = { id:uid(), name:p.name, space:dest, ts:Date.now() }; state.people.push(q); pushPerson(q); }
+    map[id] = q.id;
+  });
+  const m = id => map[id] || id;
+  exps.forEach(e => {
+    e.payerId = m(e.payerId); if (e.toId) e.toId = m(e.toId);
+    e.shares = e.shares.map(m);
+    const w = {}; Object.entries(e.w || {}).forEach(([k,v]) => { w[m(k)] = v; }); e.w = w;
+    e.space = dest;
+  });
+  g.space = dest;
+  if (old){ del(old, 'groups', g.id); exps.forEach(e => del(old, 'expenses', e.id)); }
+  if (dest){ pushGroup(g); exps.forEach(pushExpense); }
+  save(); render();
+  toast('Groupe « ' + g.name + ' » : ' + (dest ? 'partagé avec « ' + spaceName(dest) + ' »' : 'maintenant privé'));
 }
 async function copyText(t){
   try { await navigator.clipboard.writeText(t); toast('Copié'); }
   catch(e){ window.prompt('Copiez ce texte :', t); }
 }
-async function shareInvite(){
-  if (!state.share) return;
-  const url = location.origin + location.pathname + '?join=' + state.share.code;
-  const text = 'Rejoins ma liste de courses Caddie. Code : ' + fmtCode(state.share.code);
+async function shareInvite(code){
+  const sp = state.spaces.find(x => x.code === code); if (!sp) return;
+  const url = location.origin + location.pathname + '?join=' + sp.code;
+  const text = 'Rejoins l’espace « ' + sp.name + ' » sur Caddie. Code : ' + fmtCode(sp.code);
   if (navigator.share){
     try { await navigator.share({ title:'Caddie', text, url }); return; }
     catch(e){ if (e && e.name === 'AbortError') return; }
@@ -1997,9 +2249,11 @@ function openSheet(cfg){
     '<option value="' + esc(f.id) + '"' + (f.id === cfg.folderId ? ' selected' : '') + '>' + esc(f.name) + '</option>')).join('');
   const tpl = (cfg.withTemplate && state.templates.length) ? '<label class="lbl">À partir d’un modèle (facultatif)<select id="sheettpl" class="field"><option value="">Liste vide</option>' +
     state.templates.map(t => '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>').join('') + '</select></label>' : '';
+  const spOpts = '<option value="">Privé (cet appareil seulement)</option>' + state.spaces.map(x => '<option value="' + esc(x.code) + '"' + (x.code === cfg.space ? ' selected' : '') + '>' + esc(x.name) + '</option>').join('');
   el.innerHTML = '<div class="sheet-bg" data-act="sheet-close"></div><form class="sheet" id="sheetform" autocomplete="off"><h3>' + esc(cfg.title) + '</h3>' +
     '<label class="lbl">Nom<input id="sheetname" class="field" type="text" maxlength="40" value="' + esc(cfg.name || '') + '" placeholder="' + esc(cfg.placeholder || '') + '"></label>' +
-    (cfg.withFolder ? '<label class="lbl">Dossier<select id="sheetfolder" class="field">' + opts + '</select></label>' : '') + tpl +
+    (cfg.withFolder ? '<label class="lbl">Dossier<select id="sheetfolder" class="field">' + opts + '</select></label>' : '') +
+    ((cfg.withSpace && state.spaces.length) ? '<label class="lbl">Partage<select id="sheetspace" class="field">' + spOpts + '</select></label>' : '') + tpl +
     '<div class="row"><button type="submit" class="btn">' + esc(cfg.saveLabel || 'Enregistrer') + '</button><button type="button" class="btn soft" data-act="sheet-close">Annuler</button></div>' +
     (cfg.extras || []).map((x,i) => '<button type="button" class="btn soft" data-act="sheet-extra" data-i="' + i + '">' + esc(x.label) + '</button>').join('') +
     (cfg.onDelete ? '<button type="button" class="btn danger" data-act="sheet-delete">' + esc(cfg.deleteLabel || 'Supprimer') + '</button>' : '') + '</form>';
@@ -2011,8 +2265,9 @@ function openSheet(cfg){
     if (!name){ $('#sheetname').focus(); return; }
     const fid = cfg.withFolder ? ($('#sheetfolder').value || null) : null;
     const tid = $('#sheettpl') ? $('#sheettpl').value : '';
+    const sp = $('#sheetspace') ? $('#sheetspace').value : (cfg.space || '');
     closeSheet();
-    cfg.onSave(name, fid, tid);
+    cfg.onSave(name, fid, tid, sp);
   });
   setTimeout(() => { const n = $('#sheetname'); if (n){ n.focus(); n.select(); } }, 60);
 }
@@ -2020,15 +2275,16 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && sheetCfg) 
 
 function goList(id){ state.cur = id; tab = 'list'; save(); render(); $('#main').scrollTop = 0; queueQuality(listQueueKeys(id)); }
 function addItemsToList(listId, entries){
+  const sp = spaceOfList(listId);
   entries.forEach(e => {
-    const it = { id:uid(), name:e.name, key:norm(e.name), listId, rayon:e.rayon, qty:e.qty || 1, price:e.price || 0, done:false, doneTs:null, ts:Date.now(), by:state.me || '' };
+    const it = { id:uid(), name:e.name, key:norm(e.name), listId, space:sp, rayon:e.rayon, qty:e.qty || 1, price:e.price || 0, done:false, doneTs:null, ts:Date.now(), by:state.me || '' };
     state.items.push(it); pushItem(it);
   });
 }
 function newList(folderId){
-  openSheet({ title:'Nouvelle liste', placeholder:'Par exemple : Supermarché', withFolder:true, withTemplate:true, folderId:folderId || null, saveLabel:'Créer',
-    onSave:(name, fid, tid) => {
-      const l = { id:uid(), name, folderId:fid, ts:Date.now() };
+  openSheet({ title:'Nouvelle liste', placeholder:'Par exemple : Supermarché', withFolder:true, withTemplate:true, withSpace:true, space:spaceOfList(state.cur), folderId:folderId || null, saveLabel:'Créer',
+    onSave:(name, fid, tid, sp) => {
+      const l = { id:uid(), name, folderId:fid, space:sp || '', ts:Date.now() };
       state.lists.push(l); pushList(l);
       const t = tid && state.templates.find(x => x.id === tid);
       if (t) addItemsToList(l.id, t.items);
@@ -2038,16 +2294,16 @@ function newList(folderId){
 }
 function duplicateList(id){
   const l = state.lists.find(x => x.id === id); if (!l) return;
-  const nl = { id:uid(), name:(l.name + ' (copie)').slice(0,40), folderId:l.folderId, ts:Date.now() };
+  const nl = { id:uid(), name:(l.name + ' (copie)').slice(0,40), folderId:l.folderId, space:l.space || '', ts:Date.now() };
   state.lists.push(nl); pushList(nl);
-  const src = state.items.filter(i => i.listId === id);
+  const src = state.items.filter(i => inLid(i, id));
   addItemsToList(nl.id, src);
   goList(nl.id);
   toast('Liste dupliquée, ' + src.length + ' ' + plural(src.length,'article','articles'));
 }
 function saveTemplate(id){
   const l = state.lists.find(x => x.id === id); if (!l) return;
-  const src = state.items.filter(i => i.listId === id);
+  const src = state.items.filter(i => inLid(i, id));
   const t = { id:uid(), name:l.name, ts:Date.now(), items:src.map(i => ({ name:i.name, qty:i.qty, rayon:i.rayon })) };
   state.templates.push(t); pushTemplate(t); save(); render();
   toast('Modèle « ' + l.name + ' » enregistré');
@@ -2058,8 +2314,8 @@ function newFolder(){
 }
 function editList(id){
   const l = state.lists.find(x => x.id === id); if (!l) return;
-  openSheet({ title:'Modifier la liste', name:l.name, withFolder:true, folderId:l.folderId,
-    onSave:(name, fid) => { l.name = name; l.folderId = fid; pushList(l); save(); render(); },
+  openSheet({ title:'Modifier la liste', name:l.name, withFolder:true, folderId:l.folderId, withSpace:true, space:l.space || '',
+    onSave:(name, fid, tid, sp) => { l.name = name; l.folderId = fid; if ((sp || '') !== (l.space || '')) moveListToSpace(l, sp || ''); else { pushList(l); save(); render(); } },
     extras:[{ label:'Dupliquer la liste', onClick:() => duplicateList(id) }, { label:'Enregistrer comme modèle', onClick:() => saveTemplate(id) }],
     onDelete:() => deleteList(id), deleteLabel:'Supprimer la liste' });
 }
@@ -2072,13 +2328,13 @@ function editFolder(id){
 function deleteList(id){
   const l = state.lists.find(x => x.id === id); if (!l) return;
   if (state.lists.length <= 1){ closeSheet(); toast('Gardez au moins une liste.'); return; }
-  const its = state.items.filter(i => i.listId === id);
+  const its = state.items.filter(i => inLid(i, id));
   if (!confirm('Supprimer la liste « ' + l.name + ' »' + (its.length ? ' et ses ' + its.length + ' ' + plural(its.length,'article','articles') : '') + ' ?')) return;
   closeSheet();
-  its.forEach(i => delItem(i.id));
-  state.items = state.items.filter(i => i.listId !== id);
+  its.forEach(delItem);
+  state.items = state.items.filter(i => !inLid(i, id));
   state.lists = state.lists.filter(x => x.id !== id);
-  delList(id);
+  delList(l);
   if (state.cur === id) state.cur = state.lists[0].id;
   if (tab === 'list') tab = 'lists';
   save(); render(); toast('Liste supprimée');
@@ -2130,9 +2386,10 @@ function editItem(id){
 const personName = id => { const p = state.people.find(x => x.id === id); return p ? p.name : 'Ancien membre'; };
 const groupExpenses = () => state.expenses.filter(e => e.groupId === state.curGroup);
 const curGroupObj = () => state.groups.find(g => g.id === state.curGroup) || state.groups[0];
-function balances(list){
+const gPeople = () => peopleOf(curGroupObj().space || '');
+function balances(list, people){
   const b = {};
-  state.people.forEach(p => b[p.id] = 0);
+  (people || state.people).forEach(p => b[p.id] = 0);
   (list || state.expenses).forEach(e => {
     if (!(e.payerId in b)) b[e.payerId] = 0;
     if (e.type === 'transfer'){
@@ -2146,9 +2403,9 @@ function balances(list){
   });
   return b;
 }
-function settlements(b){
+function settlements(b, people){
   const cr = [], de = [];
-  state.people.forEach(p => { const v = b[p.id] || 0; if (v > 0) cr.push([p.id, v]); else if (v < 0) de.push([p.id, -v]); });
+  (people || state.people).forEach(p => { const v = b[p.id] || 0; if (v > 0) cr.push([p.id, v]); else if (v < 0) de.push([p.id, -v]); });
   cr.sort((a,c) => c[1] - a[1]); de.sort((a,c) => c[1] - a[1]);
   const out = [];
   let i = 0, j = 0;
@@ -2171,11 +2428,13 @@ function dayLabel(str){
 }
 function expensesHtml(){
   const gx = groupExpenses();
+  const gp = gPeople();
   let h = '<div class="cats first" role="group" aria-label="Groupes de dépenses">' +
     state.groups.map(g => '<button type="button" data-act="grp" data-id="' + esc(g.id) + '" aria-pressed="' + (g.id === state.curGroup) + '">' + esc(g.name) + '</button>').join('') +
     '<button type="button" data-act="new-group">+ Groupe</button></div>';
+  if (isShared()) h += '<p class="gsp">' + esc(curGroupObj().space ? 'Partagé avec « ' + spaceName(curGroupObj().space) + ' »' : 'Privé : visible sur cet appareil seulement') + '</p>';
   h += '<div class="actions"><button type="button" class="btn" data-act="new-expense">Nouvelle dépense</button><button type="button" class="btn soft" data-act="people">Personnes</button></div>';
-  if (!state.people.length){
+  if (!gp.length){
     return h + '<div class="empty"><b>Qui partage les dépenses ?</b>Ajoutez les personnes du groupe, vous compris. Caddie calcule ensuite qui doit combien à qui.</div>';
   }
   if (!gx.length){
@@ -2191,13 +2450,13 @@ function expensesHtml(){
       '<div class="bar" role="img" aria-label="Répartition par catégorie">' + CATS.filter(c => byCat[c] > 0).map(c => '<i class="cat-' + c + '" style="flex:' + byCat[c] + '"></i>').join('') + '</div>' +
       '<ul class="legend">' + CATS.map(c => '<li><span class="dot cat-' + c + '"></span>' + c + '<b>' + esc(eur(byCat[c])) + '</b></li>').join('') + '</ul></div>';
   }
-  const b = balances(gx);
-  h += '<h2>Soldes</h2><ul class="list">' + state.people.map(p => {
+  const b = balances(gx, gp);
+  h += '<h2>Soldes</h2><ul class="list">' + gp.map(p => {
     const v = b[p.id] || 0;
     const st = v > 0 ? '<span class="st pos">À recevoir ' + esc(eur(v)) + '</span>' : v < 0 ? '<span class="st neg">Doit ' + esc(eur(-v)) + '</span>' : '<span class="st">À jour</span>';
     return '<li class="balrow"><span class="nm">' + esc(p.name) + '</span> ' + st + '</li>';
   }).join('') + '</ul>';
-  const sets = settlements(b);
+  const sets = settlements(b, gp);
   if (sets.length){
     h += '<h2>Pour équilibrer</h2><ul class="list">' + sets.map(x =>
       '<li class="setrow"><span class="tx"><b>' + esc(personName(x.from)) + '</b> doit <b>' + esc(eur(x.amt)) + '</b> à <b>' + esc(personName(x.to)) + '</b></span>' +
@@ -2225,26 +2484,27 @@ function expensesHtml(){
 }
 
 function noteExpense(total){ openExpense({ cat:'Courses', title:curList().name, amount:total || 0 }); }
-function newExpenseObj(f){ return { id:uid(), ts:Date.now(), by:state.me || '', groupId:state.curGroup, w:{}, ...f }; }
+function newExpenseObj(f){ return { id:uid(), ts:Date.now(), by:state.me || '', groupId:state.curGroup, space:(curGroupObj().space || ''), w:{}, ...f }; }
 function saveExpense(e, isNew){
   if (isNew) state.expenses.push(e);
   pushExpense(e); save(); render();
 }
 function openExpense(opts){
   opts = opts || {};
-  if (!state.people.length){ toast('Ajoutez d’abord les personnes qui partagent les dépenses.'); openPeople(); return; }
+  const gp = gPeople();
+  if (!gp.length){ toast('Ajoutez d’abord les personnes qui partagent les dépenses.'); openPeople(curGroupObj().space || ''); return; }
   const ex = opts.expense || null;
   const cat = ex ? ex.cat : (opts.cat || 'Courses');
-  const payer = ex ? ex.payerId : (state.people.some(p => p.id === state.meId) ? state.meId : state.people[0].id);
-  const shares = new Set(ex ? ex.shares : state.people.map(p => p.id));
+  const payer = ex ? ex.payerId : (myIdFor(curGroupObj().space || '') || gp[0].id);
+  const shares = new Set(ex ? ex.shares : gp.map(p => p.id));
   const el = $('#sheet');
   el.innerHTML = '<div class="sheet-bg" data-act="sheet-close"></div><form class="sheet" id="exform" autocomplete="off"><h3>' + (ex ? 'Modifier la dépense' : 'Nouvelle dépense') + '</h3>' +
     '<label class="lbl">Titre<input id="ex-title" class="field" type="text" maxlength="60" value="' + esc(ex ? ex.title : (opts.title || '')) + '" placeholder="Par exemple : Courses du samedi"></label>' +
     '<label class="lbl">Montant en euros<input id="ex-amount" class="field" type="text" inputmode="decimal" value="' + (ex ? (ex.amt / 100).toFixed(2).replace('.', ',') : (opts.amount ? (opts.amount / 100).toFixed(2).replace('.', ',') : '')) + '" placeholder="0,00"></label>' +
     '<div class="lbl">Catégorie<div class="seg" role="group">' + CATS.map(c => '<button type="button" data-act="ex-cat" data-cat="' + c + '" aria-pressed="' + (c === cat) + '">' + c + '</button>').join('') + '</div></div>' +
-    '<label class="lbl">Payé par<select id="ex-payer" class="field">' + state.people.map(p => '<option value="' + esc(p.id) + '"' + (p.id === payer ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select></label>' +
+    '<label class="lbl">Payé par<select id="ex-payer" class="field">' + gp.map(p => '<option value="' + esc(p.id) + '"' + (p.id === payer ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select></label>' +
     '<label class="lbl">Date<input id="ex-date" class="field" type="date" value="' + esc(ex ? ex.date : todayStr()) + '"></label>' +
-    '<div class="lbl">Réparti entre (parts)<div class="shares">' + state.people.map(p => {
+    '<div class="lbl">Réparti entre (parts)<div class="shares">' + gp.map(p => {
       const wv = (ex && ex.w && ex.w[p.id]) || 1;
       return '<div class="shrow' + (shares.has(p.id) ? '' : ' off') + '" data-id="' + esc(p.id) + '"><button type="button" data-act="ex-share" data-id="' + esc(p.id) + '" aria-pressed="' + shares.has(p.id) + '">' + esc(p.name) + '</button>' +
         '<span class="stepper"><button type="button" data-act="ex-w" data-id="' + esc(p.id) + '" data-d="-1" aria-label="Moins de parts pour ' + esc(p.name) + '">−</button><span class="wv" data-id="' + esc(p.id) + '" aria-live="polite">' + wv + '</span><button type="button" data-act="ex-w" data-id="' + esc(p.id) + '" data-d="1" aria-label="Plus de parts pour ' + esc(p.name) + '">+</button></span></div>';
@@ -2252,7 +2512,7 @@ function openExpense(opts){
     '<div class="row"><button type="submit" class="btn">Enregistrer</button><button type="button" class="btn soft" data-act="sheet-close">Annuler</button></div>' +
     (ex ? '<button type="button" class="btn danger" data-act="sheet-delete">Supprimer la dépense</button>' : '') + '</form>';
   el.hidden = false;
-  sheetCfg = ex ? { onDelete:() => { if (confirm('Supprimer cette dépense ?')){ closeSheet(); state.expenses = state.expenses.filter(x => x.id !== ex.id); delExpense(ex.id); save(); render(); toast('Dépense supprimée'); } } } : {};
+  sheetCfg = ex ? { onDelete:() => { if (confirm('Supprimer cette dépense ?')){ closeSheet(); state.expenses = state.expenses.filter(x => x.id !== ex.id); delExpense(ex); save(); render(); toast('Dépense supprimée'); } } } : {};
   $('#exform').addEventListener('submit', ev => {
     ev.preventDefault();
     const amt = parseAmount($('#ex-amount').value);
@@ -2271,13 +2531,13 @@ function openExpense(opts){
   setTimeout(() => { const n = $('#ex-title'); if (n && !ex) n.focus(); }, 60);
 }
 function newGroup(){
-  openSheet({ title:'Nouveau groupe de dépenses', placeholder:'Par exemple : Voyage en Italie', saveLabel:'Créer',
-    onSave:name => { const g = { id:uid(), name, ts:Date.now() }; state.groups.push(g); pushGroup(g); state.curGroup = g.id; state.expCat = 'all'; save(); render(); toast('Groupe « ' + name + ' » créé'); } });
+  openSheet({ title:'Nouveau groupe de dépenses', placeholder:'Par exemple : Voyage en Italie', withSpace:true, space:curGroupObj().space || '', saveLabel:'Créer',
+    onSave:(name, fid, tid, sp) => { const g = { id:uid(), name, space:sp || '', ts:Date.now() }; state.groups.push(g); pushGroup(g); state.curGroup = g.id; state.expCat = 'all'; save(); render(); toast('Groupe « ' + name + ' » créé'); } });
 }
 function editGroup(){
   const g = curGroupObj();
-  openSheet({ title:'Modifier le groupe', name:g.name,
-    onSave:name => { g.name = name; pushGroup(g); save(); render(); },
+  openSheet({ title:'Modifier le groupe', name:g.name, withSpace:true, space:g.space || '',
+    onSave:(name, fid, tid, sp) => { g.name = name; if ((sp || '') !== (g.space || '')) moveGroupToSpace(g, sp || ''); else { pushGroup(g); save(); render(); } },
     onDelete:() => deleteGroup(g.id), deleteLabel:'Supprimer le groupe' });
 }
 function deleteGroup(id){
@@ -2286,10 +2546,10 @@ function deleteGroup(id){
   const ex = state.expenses.filter(e => e.groupId === id);
   if (!confirm('Supprimer le groupe « ' + g.name + ' »' + (ex.length ? ' et ses ' + ex.length + ' ' + plural(ex.length,'dépense','dépenses') : '') + ' ?')) return;
   closeSheet();
-  ex.forEach(e => delExpense(e.id));
+  ex.forEach(delExpense);
   state.expenses = state.expenses.filter(e => e.groupId !== id);
   state.groups = state.groups.filter(x => x.id !== id);
-  delGroup(id);
+  delGroup(g);
   state.curGroup = state.groups[0].id;
   save(); render(); toast('Groupe supprimé');
 }
@@ -2330,25 +2590,27 @@ function exportPurchasesCsv(){
   toast('Fichier des achats exporté');
 }
 
-function openPeople(){
+function openPeople(sp){
+  sp = sp || '';
+  const ppl = peopleOf(sp);
   const el = $('#sheet');
-  el.innerHTML = '<div class="sheet-bg" data-act="sheet-close"></div><form class="sheet" id="peopleform" autocomplete="off"><h3>Personnes</h3>' +
-    '<div class="lbl">Qui partage les dépenses ? Touchez « Moi » à côté de votre prénom.</div>' +
-    (state.people.length ? '<ul class="list">' + state.people.map(p => '<li class="orow"><span class="nm">' + esc(p.name) + '</span>' +
-      '<button type="button" class="btn soft" data-act="person-me" data-id="' + esc(p.id) + '" aria-pressed="' + (p.id === state.meId) + '">Moi</button>' +
+  el.innerHTML = '<div class="sheet-bg" data-act="sheet-close"></div><form class="sheet" id="peopleform" autocomplete="off"><h3>Personnes' + (sp ? ' de « ' + esc(spaceName(sp)) + ' »' : '') + '</h3>' +
+    '<div class="lbl">Qui partage les dépenses ' + (sp ? 'dans cet espace' : '(en privé)') + ' ? Touchez « Moi » à côté de votre prénom.</div>' +
+    (ppl.length ? '<ul class="list">' + ppl.map(p => '<li class="orow"><span class="nm">' + esc(p.name) + '</span>' +
+      '<button type="button" class="btn soft" data-act="person-me" data-id="' + esc(p.id) + '" aria-pressed="' + (p.id === myIdFor(sp)) + '">Moi</button>' +
       '<button type="button" class="rm" data-act="person-del" data-id="' + esc(p.id) + '" aria-label="Retirer ' + esc(p.name) + '">' + ICON.x + '</button></li>').join('') + '</ul>' : '') +
     '<div class="join"><input id="newperson" class="field" type="text" maxlength="30" placeholder="Prénom" style="text-transform:none;letter-spacing:0"><button type="submit" class="btn">Ajouter</button></div>' +
     '<button type="button" class="btn soft" data-act="sheet-close" style="min-height:46px">Terminer</button></form>';
   el.hidden = false;
-  sheetCfg = {};
+  sheetCfg = { people:sp };
   $('#peopleform').addEventListener('submit', ev => {
     ev.preventDefault();
     const name = cap($('#newperson').value.trim());
     if (!name) return;
-    const pr = { id:uid(), name, ts:Date.now() };
+    const pr = { id:uid(), name, space:sp, ts:Date.now() };
     state.people.push(pr); pushPerson(pr);
-    if (state.people.length === 1 && !state.meId){ state.meId = pr.id; if (!state.me) state.me = pr.name; }
-    save(); render(); openPeople();
+    if (peopleOf(sp).length === 1 && !myIdFor(sp)){ state.meIds[sp] = pr.id; if (!state.me) state.me = pr.name; }
+    save(); render(); openPeople(sp);
     setTimeout(() => { const n = $('#newperson'); if (n) n.focus(); }, 30);
   });
 }
@@ -2365,8 +2627,8 @@ $('#app').addEventListener('click', e => {
     case 'clear-done': {
       const gone = curItems().filter(i => i.done);
       const goneTotal = gone.reduce((a,i) => a + (i.price || 0) * i.qty, 0);
-      gone.forEach(i => delItem(i.id));
-      state.items = state.items.filter(i => !(i.done && i.listId === state.cur));
+      gone.forEach(delItem);
+      state.items = state.items.filter(i => !(i.done && inCur(i)));
       save(); render();
       toast(gone.length + ' ' + plural(gone.length,'article retiré','articles retirés') + ' du caddie', 'Noter la dépense', () => noteExpense(goneTotal));
       break;
@@ -2381,8 +2643,10 @@ $('#app').addEventListener('click', e => {
     case 'hist-add': { const h = state.history[key]; if (h){ addItem(h.name, h.rayon, 1); render(); toast(h.name + ' ajouté à la liste'); } break; }
     case 'hist-del': {
       const h = state.history[key]; if (!h) break;
-      delete state.history[key]; delHist(key); save(); render();
-      toast(h.name + ' oublié', 'Annuler', () => { state.history[key] = h; pushHistFull(key, h); save(); render(); });
+      const saved = {};
+      Object.entries(state.hp).forEach(([sp, part]) => { if (part[key]){ saved[sp] = part[key]; delete part[key]; delHist(sp, key); } });
+      rebuildHistory(); save(); render();
+      toast(h.name + ' oublié', 'Annuler', () => { Object.entries(saved).forEach(([sp, e]) => { hpart(sp)[key] = e; pushHistFull(sp, key, e); }); rebuildHistory(); save(); render(); });
       break;
     }
     case 'up': case 'down': {
@@ -2405,17 +2669,17 @@ $('#app').addEventListener('click', e => {
     case 'clr-hist': {
       const n = Object.keys(state.history).length;
       if (!n){ toast('L’historique est déjà vide.'); break; }
-      if (confirm('Effacer l’historique des achats, des prix et des ajouts (' + n + ' ' + plural(n,'produit','produits') + ') ? Les listes et les dépenses restent.' + (state.share ? ' Pour tout le foyer.' : ''))){
-        Object.keys(state.history).forEach(k => delHist(k));
-        state.history = {}; state.qMiss = {}; state.dismissed = {}; qQueue = []; save(); render(); toast('Historique effacé');
+      if (confirm('Effacer l’historique des achats, des prix et des ajouts (' + n + ' ' + plural(n,'produit','produits') + ') ? Les listes et les dépenses restent.' + (isShared() ? ' Dans vos espaces partagés aussi.' : ''))){
+        clearAllHistory();
+        state.qMiss = {}; state.dismissed = {}; qQueue = []; save(); render(); toast('Historique effacé');
       }
       break;
     }
     case 'clr-q': {
       const ks = Object.keys(state.history).filter(k => state.history[k].q);
       if (!ks.length){ toast('Aucune évaluation à effacer.'); break; }
-      if (confirm('Effacer les ' + ks.length + ' évaluations Nutri-Score ?' + (state.share ? ' Pour tout le foyer.' : ''))){
-        ks.forEach(k => { state.history[k].q = null; pushHistQ(k, state.history[k]); });
+      if (confirm('Effacer les ' + ks.length + ' évaluations Nutri-Score ?' + (isShared() ? ' Dans vos espaces partagés aussi.' : ''))){
+        ks.forEach(k => hSetQ(k, null));
         state.qMiss = {}; qQueue = []; save(); render(); toast('Évaluations effacées');
       }
       break;
@@ -2423,13 +2687,20 @@ $('#app').addEventListener('click', e => {
     case 'clr-exp': {
       const n = state.expenses.length;
       if (!n){ toast('Il n’y a aucune dépense à effacer.'); break; }
-      if (confirm('Effacer les ' + n + ' dépenses et remboursements, dans tous les groupes ?' + (state.share ? ' Pour tout le foyer.' : ''))){
-        state.expenses.forEach(e => delExpense(e.id));
+      if (confirm('Effacer les ' + n + ' dépenses et remboursements, dans tous les groupes ?' + (isShared() ? ' Dans vos espaces partagés aussi.' : ''))){
+        state.expenses.forEach(delExpense);
         state.expenses = []; save(); render(); toast('Dépenses effacées');
       }
       break;
     }
     case 'diag-off': diagOff(); break;
+    case 'relay-save': {
+      const v = (($('#relay') || {}).value || '').trim();
+      if (v && !/^https:\/\/[^\s]{4,200}$/.test(v)){ toast('L’adresse doit commencer par https://'); break; }
+      state.relay = v; state.searchBlocked = 0; qDownUntil = 0; save(); render();
+      toast(v ? 'Relais enregistré. Lancez « Tester la connexion » pour le vérifier.' : 'Relais retiré');
+      break;
+    }
     case 'q-edit': editQuality(key); break;
     case 'q-estimate': queueQuality(needsEstimate().sort((a,b) => b[1].dates.length - a[1].dates.length).slice(0, 10).map(x => x[0]), true); render(); break;
     case 'q-list': queueQuality(listQueueKeys(state.cur), true); render(); break;
@@ -2437,9 +2708,9 @@ $('#app').addEventListener('click', e => {
     case 'clear-history': {
       const n = Object.keys(state.history).length;
       if (!n){ toast('L’historique d’achats est déjà vide.'); break; }
-      if (confirm('Effacer tout l’historique d’achats (' + n + ' ' + plural(n,'produit','produits') + ')' + (state.share ? ' pour tout le foyer' : '') + ' ? Les suggestions « À prévoir » et les statistiques d’achats repartent de zéro. Vos listes ne changent pas.')){
-        Object.keys(state.history).forEach(k => delHist(k));
-        state.history = {}; state.dismissed = {}; state.qMiss = {};
+      if (confirm('Effacer tout l’historique d’achats (' + n + ' ' + plural(n,'produit','produits') + ')' + (isShared() ? ' dans vos espaces partagés aussi' : '') + ' ? Les suggestions « À prévoir » et les statistiques d’achats repartent de zéro. Vos listes ne changent pas.')){
+        clearAllHistory();
+        state.dismissed = {}; state.qMiss = {};
         save(); render(); toast('Historique d’achats effacé');
       }
       break;
@@ -2447,8 +2718,8 @@ $('#app').addEventListener('click', e => {
     case 'clear-expenses': {
       const n = state.expenses.length;
       if (!n){ toast('Il n’y a aucune dépense à effacer.'); break; }
-      if (confirm('Effacer les ' + n + ' ' + plural(n,'dépense','dépenses') + ' de tous les groupes' + (state.share ? ' pour tout le foyer' : '') + ' ? Les personnes et les groupes sont conservés.')){
-        state.expenses.forEach(e => delExpense(e.id));
+      if (confirm('Effacer les ' + n + ' ' + plural(n,'dépense','dépenses') + ' de tous les groupes' + (isShared() ? ' dans vos espaces partagés aussi' : '') + ' ? Les personnes et les groupes sont conservés.')){
+        state.expenses.forEach(delExpense);
         state.expenses = [];
         save(); render(); toast('Dépenses effacées');
       }
@@ -2469,11 +2740,11 @@ $('#app').addEventListener('click', e => {
       break;
     }
     case 'new-expense': openExpense(); break;
-    case 'people': openPeople(); break;
+    case 'people': openPeople(curGroupObj().space || ''); break;
     case 'edit-expense': {
       const e = state.expenses.find(x => x.id === id); if (!e) break;
       if (e.type === 'transfer'){
-        if (confirm('Supprimer ce remboursement de ' + eur(e.amt) + ' ?')){ state.expenses = state.expenses.filter(x => x.id !== id); delExpense(id); save(); render(); toast('Remboursement supprimé'); }
+        if (confirm('Supprimer ce remboursement de ' + eur(e.amt) + ' ?')){ state.expenses = state.expenses.filter(x => x.id !== id); delExpense(e); save(); render(); toast('Remboursement supprimé'); }
       } else openExpense({ expense:e });
       break;
     }
@@ -2486,13 +2757,13 @@ $('#app').addEventListener('click', e => {
       toast('Remboursement noté');
       break;
     }
-    case 'person-me': { const pr = state.people.find(x => x.id === id); if (pr){ state.meId = pr.id; state.me = pr.name; save(); openPeople(); } break; }
+    case 'person-me': { const pr = state.people.find(x => x.id === id); if (pr){ state.meIds[pr.space || ''] = pr.id; state.me = pr.name; save(); openPeople(pr.space || ''); } break; }
     case 'person-del': {
       const pr = state.people.find(x => x.id === id); if (!pr) break;
       if (state.expenses.some(e => e.payerId === id || e.toId === id || e.shares.includes(id))){ toast(pr.name + ' apparaît dans des dépenses : impossible de la retirer.'); break; }
-      state.people = state.people.filter(x => x.id !== id); delPerson(id);
-      if (state.meId === id) state.meId = '';
-      save(); render(); openPeople();
+      state.people = state.people.filter(x => x.id !== id); delPerson(pr);
+      if (state.meIds[pr.space || ''] === id) delete state.meIds[pr.space || ''];
+      save(); render(); openPeople(pr.space || '');
       break;
     }
     case 'open-list': goList(id); break;
@@ -2507,16 +2778,17 @@ $('#app').addEventListener('click', e => {
     case 'scan-pick': { const sp = sheetCfg && sheetCfg.scanPick; const it = state.items.find(x => x.id === id); if (sp && it){ closeSheet(); applyScan(it, sp.code, sp.info); } break; }
     case 'scan-new': { const sp = sheetCfg && sheetCfg.scanPick; if (sp){ closeSheet(); addScanned(sp.code, sp.info); } break; }
     case 'sheet-delete': if (sheetCfg && sheetCfg.onDelete) sheetCfg.onDelete(); break;
-    case 'share-create': createHousehold(); break;
-    case 'share-join': joinHousehold(($('#joincode') || {}).value); break;
-    case 'share-link': shareInvite(); break;
-    case 'share-copy': if (state.share) copyText(fmtCode(state.share.code)); break;
-    case 'share-leave': leaveHousehold(); break;
+    case 'share-create': openSheet({ title:'Nouvel espace de partage', name:state.spaces.length ? '' : 'Foyer', placeholder:'Par exemple : Famille, Colocs, Tom et moi', saveLabel:'Créer', onSave:name => createSpace(name) }); break;
+    case 'share-join': joinSpace(($('#joincode') || {}).value); break;
+    case 'share-link': shareInvite(t.dataset.code); break;
+    case 'share-copy': copyText(fmtCode(t.dataset.code)); break;
+    case 'share-leave': leaveSpace(t.dataset.code); break;
+    case 'space-rename': { const sp = state.spaces.find(x => x.code === t.dataset.code); if (sp) openSheet({ title:'Renommer l’espace', name:sp.name, saveLabel:'Enregistrer', onSave:name => renameSpace(sp.code, name) }); break; }
     case 'demo': loadDemo(); break;
     case 'export': exportData(); break;
-    case 'import': if (state.share) toast('Quittez d’abord le partage pour importer une sauvegarde.'); else $('#file').click(); break;
+    case 'import': if (isShared()) toast('Quittez d’abord vos espaces de partage pour importer une sauvegarde.'); else $('#file').click(); break;
     case 'reset':
-      if (confirm('Effacer la liste, l’historique et les réglages de cet appareil ?' + (state.share ? ' Le lien avec la liste partagée sera aussi supprimé ici ; les autres appareils la gardent.' : ''))){
+      if (confirm('Effacer la liste, l’historique et les réglages de cet appareil ?' + (isShared() ? ' Vous quitterez aussi vos espaces de partage sur cet appareil ; les autres membres gardent les leurs.' : ''))){
         stopSync();
         try { localStorage.removeItem(KEY); } catch(err){}
         state = normalizeState({}); fillRayonSelect(); render(); toast('Tout a été effacé');
@@ -2529,7 +2801,7 @@ document.addEventListener('change', e => {
   if (e.target && e.target.id === 'meinput'){ state.me = e.target.value.trim().slice(0,20); save(); }
 });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && e.target && e.target.id === 'joincode'){ e.preventDefault(); joinHousehold(e.target.value); }
+  if (e.key === 'Enter' && e.target && e.target.id === 'joincode'){ e.preventDefault(); joinSpace(e.target.value); }
 });
 
 /* ---------- Démarrage ---------- */
@@ -2538,7 +2810,7 @@ $('#scan').innerHTML = ICON.scan;
 $('#addbtn').innerHTML = ICON.plus;
 fillRayonSelect();
 render();
-if (state.share && CFG) startSync();
+if (isShared() && CFG) startSync();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
 {
   const jp = new URLSearchParams(location.search).get('join');
@@ -2547,7 +2819,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) rend
     tab = 'settings'; render();
     const code = cleanCode(jp);
     if (CFG && validCode(code)){
-      setTimeout(() => { if (confirm('Rejoindre la liste partagée ' + fmtCode(code) + ' ?')) joinHousehold(code); }, 300);
+      setTimeout(() => { if (confirm('Rejoindre la liste partagée ' + fmtCode(code) + ' ?')) joinSpace(code); }, 300);
     } else {
       toast(CFG ? 'Ce lien de partage n’est pas valide.' : 'Le partage n’est pas activé dans cette installation.');
     }
