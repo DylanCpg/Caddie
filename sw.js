@@ -1,6 +1,6 @@
 // Service worker de Caddie : permet d’ouvrir l’appli sans réseau.
 // Si vous modifiez les fichiers, changez le numéro de version ci-dessous.
-const CACHE = 'caddie-v8';
+const CACHE = 'caddie-v9';
 const ASSETS = ['./', 'index.html', 'manifest.json', 'firebase-config.js', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {

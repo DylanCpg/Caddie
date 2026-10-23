@@ -472,6 +472,22 @@ button.txtcol{background:none;text-align:left;align-items:flex-start;padding:10p
 .qbtn{flex:none;width:44px;height:44px;display:grid;place-items:center;border-radius:12px}
 .qbtn:active{background:var(--raise)}
 
+.item .txtcol .imeta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px}
+.item .txtcol .imeta:empty{display:none}
+.imeta .qty{margin:0;padding:1px 8px;font-size:.78rem}
+.imeta .pr{margin:0;font-size:.84rem}
+.ns.sm{width:26px;height:26px;border-radius:8px;font-size:.82rem}
+.ns.est{background:transparent !important;border:2px solid currentColor}
+.itbadge{flex:none;display:grid;place-items:center;width:30px}
+.qline{display:flex;align-items:center;gap:10px;margin:10px 0 0;color:var(--ink-2);font-size:.88rem}
+.qline b{color:var(--ink);font-weight:600}
+.lq{flex:none;display:flex;align-items:center;margin-right:4px}
+.lmeta2{color:var(--ink-2);font-size:.8rem}
+.listq{display:flex;justify-content:center;margin:14px 0 0}
+.clearbox{margin-top:28px}
+.clearbox .row{display:flex;flex-direction:column;gap:8px}
+.clearbox .btn{width:100%;text-align:left;min-height:46px}
+
 @media (prefers-reduced-motion: reduce){
   *{transition:none !important;animation:none !important}
 }
@@ -761,6 +777,7 @@ function addItem(name, rayon, qty){
     lastAdded = it.id;
     pushItem(it);
     recordAdd(key, it.name, rz);
+    if (!state.history[key].q && rz !== FRESH) queueQuality([key]);
   }
   save();
   return true;
@@ -825,8 +842,11 @@ function renderHeader(){
     const pct = mine.length ? Math.round(done / mine.length * 100) : 0;
     const tot = mine.reduce((a,i) => a + (i.price || 0) * i.qty, 0), inCart = doneTotal();
     const estLine = tot ? 'Total estimé ' + eur(tot) + (inCart ? ', dont ' + eur(inCart) + ' dans le caddie' : '') : '';
+    const lq = listQuality(state.cur);
+    const qLine = lq.ns ? '<p class="qline">' + nsBadge(lq.ns, 'sm', lq.exact < lq.n) + '<span><b>Nutri-Score moyen ' + lq.ns.toUpperCase() + '</b>, ' + lq.n + ' sur ' + lq.total + ' ' + plural(lq.total,'article évalué','articles évalués') + (lq.exact ? ' (' + lq.exact + ' scanné' + (lq.exact > 1 ? 's' : '') + ')' : '') + (qBusy ? ', calcul en cours…' : '') + '</span></p>'
+      : (qBusy && mine.length ? '<p class="qline"><span>Calcul du Nutri-Score en cours…</span></p>' : '');
     top.innerHTML = '<div class="crumb"><button type="button" class="back" data-act="back" aria-label="Retour à toutes les listes">' + ICON.back + '<span>Listes</span></button>' + (F ? '<span class="crumb-f">' + esc(F.name) + '</span>' : '') + '</div>' +
-      '<div class="hd"><h1>' + esc(L ? L.name : 'Liste') + '</h1>' + pillHtml() + '</div><p class="sub">' + esc(sub) + '</p>' + (estLine ? '<p class="est">' + esc(estLine) + '</p>' : '') +
+      '<div class="hd"><h1>' + esc(L ? L.name : 'Liste') + '</h1>' + pillHtml() + '</div><p class="sub">' + esc(sub) + '</p>' + (estLine ? '<p class="est">' + esc(estLine) + '</p>' : '') + qLine +
       (mine.length ? '<div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><i style="width:' + pct + '%"></i></div>' : '');
   } else if (tab === 'lists'){
     const n = state.lists.length, m = state.folders.length;
@@ -844,11 +864,14 @@ function renderHeader(){
 
 function itemHtml(it){
   const by = (state.share && it.by && it.by !== state.me) ? 'Ajouté par ' + it.by : '';
+  const q = itemQuality(it);
+  const badge = q && q.ns ? '<span class="itbadge">' + nsBadge(q.ns, 'sm', !isExact(q)) + '</span>' : '';
+  const meta = (it.qty > 1 ? '<span class="qty">×' + it.qty + '</span>' : '') + (it.price ? '<span class="pr">' + esc(eur(it.price * it.qty)) + '</span>' : '') + (by ? '<span class="by">' + esc(by) + '</span>' : '');
   return '<li class="item' + (it.done ? ' done' : '') + (it.id === lastAdded ? ' flash' : '') + '">' +
     '<button type="button" class="check" data-act="toggle" data-id="' + it.id + '" aria-pressed="' + it.done + '" aria-label="' + (it.done ? 'Décocher ' : 'Cocher ') + esc(it.name) + '"><span>' + ICON.check + '</span></button>' +
-    '<button type="button" class="txtcol" data-act="edit-item" data-id="' + it.id + '" aria-label="Modifier ' + esc(it.name) + '"><span class="name">' + esc(it.name) + '</span>' + (by ? '<span class="by">' + esc(by) + '</span>' : '') + '</button>' +
-    (it.qty > 1 ? '<span class="qty">×' + it.qty + '</span>' : '') +
-    (it.price ? '<span class="pr">' + esc(eur(it.price * it.qty)) + '</span>' : '') +
+    '<button type="button" class="txtcol" data-act="edit-item" data-id="' + it.id + '" aria-label="Modifier ' + esc(it.name) + '"><span class="name">' + esc(it.name) + '</span><span class="imeta">' + meta + '</span></button>' +
+    badge +
+    (!it.done && scanOK ? '<button type="button" class="rm" data-act="scan-item" data-id="' + it.id + '" aria-label="Scanner ' + esc(it.name) + ' en magasin">' + ICON.scan + '</button>' : '') +
     '<button type="button" class="rm" data-act="remove" data-id="' + it.id + '" aria-label="Retirer ' + esc(it.name) + '">' + ICON.x + '</button>' +
   '</li>';
 }
@@ -867,6 +890,8 @@ function listHtml(){
       '</li>').join('') + '</ul></section>';
   }
   const mine = curItems();
+  const pend = listQueueKeys(state.cur);
+  if (pend.length && !qBusy) html += '<div class="listq"><button type="button" class="ghost accent" data-act="q-list">Calculer le Nutri-Score (' + pend.length + ' ' + plural(pend.length,'article','articles') + ')</button></div>';
   if (!mine.length){
     html += '<div class="empty"><b>Votre liste est vide</b>Écrivez un article en bas de l’écran' + (SR ? ', ou dictez-en plusieurs avec le micro' : '') + '. Cochez-les en magasin : Caddie apprendra ce qu’il vous faut et quand.</div>';
     return html;
@@ -890,8 +915,11 @@ function listRow(l){
   const its = state.items.filter(i => i.listId === l.id);
   const open = its.filter(i => !i.done).length;
   const meta = open ? open + ' ' + plural(open,'article','articles') + ' à acheter' : (its.length ? 'Tout est dans le caddie' : 'Liste vide');
+  const lq = listQuality(l.id);
+  const lqText = lq.ns ? 'Nutri-Score moyen ' + lq.ns.toUpperCase() + ', ' + lq.n + ' sur ' + lq.total + ' ' + plural(lq.total,'article évalué','articles évalués') : '';
   return '<li class="lrow"><button type="button" class="lrow-main" data-act="open-list" data-id="' + esc(l.id) + '">' +
-    '<span class="ltxt"><span class="lname">' + esc(l.name) + '</span><span class="lmeta' + (open ? ' has' : '') + '">' + esc(meta) + '</span></span>' +
+    '<span class="ltxt"><span class="lname">' + esc(l.name) + '</span><span class="lmeta' + (open ? ' has' : '') + '">' + esc(meta) + '</span>' + (lqText ? '<span class="lmeta2">' + esc(lqText) + '</span>' : '') + '</span>' +
+    (lq.ns ? '<span class="lq">' + nsBadge(lq.ns, '', lq.exact < lq.n) + '</span>' : '') +
     '<span class="lchev">' + ICON.chevR + '</span></button>' +
     '<button type="button" class="rm" data-act="edit-list" data-id="' + esc(l.id) + '" aria-label="Modifier la liste ' + esc(l.name) + '">' + ICON.pencil + '</button></li>';
 }
@@ -1093,9 +1121,26 @@ const NS_INK = { a:'#FFFFFF', b:'#10200A', c:'#2B2400', d:'#2B1500', e:'#FFFFFF'
 const NOVA_COL = ['#7BD88F','#F2D45C','#FFB86B','#FF7B9C'];
 const NOVA_LAB = ['Non transformés','Ingrédients culinaires','Transformés','Ultra-transformés'];
 const SRC_LAB = { scan:'scanné', manuel:'corrigé', match:'estimé', frais:'estimé', avg:'estimé' };
-const nsBadge = (g, cls) => g ? '<span class="ns ' + (cls || '') + '" style="background:' + NS_COL[g] + ';color:' + NS_INK[g] + '" aria-label="Nutri-Score ' + g.toUpperCase() + '">' + g.toUpperCase() + '</span>' : '';
+const NS_TXT = { a:'#3CCB7F', b:'#A5D64A', c:'#FECB02', d:'#FF9B33', e:'#FF6A45' };
+const nsBadge = (g, cls, est) => !g ? '' : est
+  ? '<span class="ns est ' + (cls || '') + '" style="color:' + NS_TXT[g] + '" aria-label="Nutri-Score ' + g.toUpperCase() + ', estimé">' + g.toUpperCase() + '</span>'
+  : '<span class="ns ' + (cls || '') + '" style="background:' + NS_COL[g] + ';color:' + NS_INK[g] + '" aria-label="Nutri-Score ' + g.toUpperCase() + '">' + g.toUpperCase() + '</span>';
 const FRESH = 'Fruits et légumes';
 
+let QCTX = null;
+const qctx = () => QCTX || (QCTX = { avgs:rayonAverages() });
+const isExact = q => q && (q.src === 'scan' || q.src === 'manuel');
+function itemQuality(it){ const h = state.history[it.key]; return h ? effQuality(h, qctx().avgs) : null; }
+function listQuality(listId){
+  const its = state.items.filter(i => i.listId === listId);
+  let sum = 0, n = 0, exact = 0, ev = 0;
+  its.forEach(i => {
+    const q = itemQuality(i);
+    if (q && (q.ns || q.nova)){ ev++; if (isExact(q)) exact++; }
+    if (q && q.ns){ sum += NS.indexOf(q.ns); n++; }
+  });
+  return { ns:n ? NS[Math.round(sum / n)] : '', n, total:its.length, evaluated:ev, exact };
+}
 function rayonAverages(){
   const acc = {};
   Object.values(state.history).forEach(h => {
@@ -1121,7 +1166,7 @@ const needsEstimate = () => Object.entries(state.history).filter(([k,h]) => h.da
 const missList = () => Object.keys(state.qMiss).filter(k => state.history[k] && !state.history[k].q && state.history[k].dates.length);
 
 const Q_DELAY = (typeof window.__caddieQDelay === 'number') ? window.__caddieQDelay : 6500;
-let qBusy = false, qCancel = false;
+let qBusy = false, qCancel = false, qRunning = false, qVerbose = false, qQueue = [], qDownUntil = 0;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 function median(arr){ const a = arr.slice().sort((x,y) => x - y); return a.length ? a[Math.floor((a.length - 1) / 2)] : 0; }
 function nameVariants(name){
@@ -1130,12 +1175,17 @@ function nameVariants(name){
   const sing = noAcc.replace(/s$/i, '');
   return [...new Set([n, noAcc, sing.length > 3 ? sing : noAcc])];
 }
-async function offSearch(term, france){
-  const url = 'https://world.openfoodfacts.org/cgi/search.pl?search_terms=' + encodeURIComponent(term) +
-    '&search_simple=1&action=process&json=1&page_size=24&sort_by=unique_scans_n' +
-    (france ? '&tagtype_0=countries&tag_contains_0=contains&tag_0=france' : '') + '&fields=code,product_name,nutriscore_grade,nova_group';
-  const j = await fetchJson(url, 9000);
-  return { err:j === null, list:(j && Array.isArray(j.products)) ? j.products : [] };
+async function offSearch(term, mode){
+  const F = 'code,product_name,nutriscore_grade,nova_group';
+  const url = mode === 'sal'
+    ? 'https://search.openfoodfacts.org/search?q=' + encodeURIComponent(term) + '&langs=fr&page_size=24&fields=' + F
+    : 'https://world.openfoodfacts.org/cgi/search.pl?search_terms=' + encodeURIComponent(term) + '&search_simple=1&action=process&json=1&page_size=24&sort_by=unique_scans_n' +
+      (mode === 'fr' ? '&tagtype_0=countries&tag_contains_0=contains&tag_0=france' : '') + '&fields=' + F;
+  const ms = mode === 'sal' ? 12000 : 20000;
+  let r = await fetchDetail(url, ms);
+  if (r.err && /erreur (429|503)/.test(r.err)){ await sleep(Math.min(Q_DELAY, 5000)); r = await fetchDetail(url, ms); }
+  const d = r.data;
+  return { err:r.err, list:d ? (Array.isArray(d.hits) ? d.hits : Array.isArray(d.products) ? d.products : []) : [] };
 }
 function analyse(list){
   const gs = list.map(x => NS.indexOf(x.nutriscore_grade)).filter(i => i >= 0);
@@ -1144,46 +1194,93 @@ function analyse(list){
   const ref = (list.find(x => x.product_name && NS.includes(x.nutriscore_grade)) || list.find(x => x.product_name) || {}).product_name || '';
   return { ns:gs.length ? NS[median(gs)] : '', nova:nv.length ? median(nv) : 0, src:'match', ref:String(ref).slice(0,60) };
 }
-// Essaie : le nom en France, une variante du nom en France, puis le nom dans le monde entier.
+// Essaie : recherche rapide, recherche classique en France, variante du nom, puis le monde entier.
 async function offMatch(name){
   const v = nameVariants(name);
-  const tries = [[v[0], true]];
-  if (v[1] !== v[0]) tries.push([v[1], true]); else if (v[2] !== v[0]) tries.push([v[2], true]);
-  tries.push([v[0], false]);
-  let anyOk = false;
+  const alt = v[1] !== v[0] ? v[1] : (v[2] !== v[0] ? v[2] : null);
+  const tries = [[v[0], 'sal'], [v[0], 'fr']];
+  if (alt) tries.push([alt, 'sal']);
+  tries.push([v[0], 'world']);
+  let anyOk = false, why = '', errs = 0;
   for (let i = 0; i < tries.length && !qCancel; i++){
     if (i > 0) await sleep(Q_DELAY);
     const r = await offSearch(tries[i][0], tries[i][1]);
-    if (!r.err) anyOk = true;
+    if (!r.err) anyOk = true; else { errs++; if (!why) why = r.err; }
     const a = analyse(r.list);
-    if (a) return { r:a, err:false };
+    if (a) return { r:a, err:false, why:'' };
+    if (errs >= 2 && !anyOk) break;
   }
-  return { r:null, err:!anyOk };
+  return { r:null, err:!anyOk, why };
 }
-async function estimateMissing(){
-  if (qBusy) return;
-  if (!navigator.onLine){ toast('Connectez-vous à internet pour estimer la qualité.'); return; }
-  const todo = needsEstimate().sort((a,b) => b[1].dates.length - a[1].dates.length).slice(0, 10);
-  if (!todo.length){ toast('Rien à estimer pour le moment.'); return; }
-  qBusy = true; qCancel = false;
-  let found = 0, errors = 0, miss = 0;
-  for (let i = 0; i < todo.length && !qCancel; i++){
-    const [k,h] = todo[i];
-    toast('Estimation ' + (i + 1) + '/' + todo.length + ' : ' + h.name);
-    const { r, err } = await offMatch(h.name);
-    if (r && state.history[k]){ state.history[k].q = normQ(r); delete state.qMiss[k]; pushHistQ(k, state.history[k]); found++; }
-    else if (err) errors++;
-    else { state.qMiss[k] = Date.now(); miss++; }
-    save(); if (tab === 'stats') render();
-    if (i < todo.length - 1 && !qCancel) await sleep(Q_DELAY);
+const softRender = () => { if (['list','lists','stats'].includes(tab)) render(); };
+function listQueueKeys(listId){
+  const its = state.items.filter(i => i.listId === listId && !i.done);
+  its.forEach(i => { if (!state.history[i.key]) state.history[i.key] = newHist(i.name, i.rayon); });
+  return [...new Set(its.map(i => i.key))].filter(k => {
+    const h = state.history[k];
+    return h && !h.q && h.rayon !== FRESH && !qQueue.includes(k) && !(state.qMiss[k] && Date.now() - state.qMiss[k] < 3 * DAY);
+  }).slice(0, 10);
+}
+function queueQuality(keys, verbose){
+  if (verbose) qDownUntil = 0; else if (Date.now() < qDownUntil) return;
+  keys.forEach(k => { if (!qQueue.includes(k)) qQueue.push(k); });
+  if (verbose) qVerbose = true;
+  if (!qRunning && qQueue.length) runQQueue();
+}
+async function runQQueue(){
+  if (qRunning) return;
+  qRunning = true; qBusy = true; qCancel = false;
+  const st = { found:0, miss:0, err:0, done:0, why:'' }, total0 = qQueue.length;
+  softRender();
+  while (qQueue.length && !qCancel && navigator.onLine){
+    const k = qQueue.shift(), h = state.history[k];
+    if (!h || h.q || h.rayon === FRESH) continue;
+    if (qVerbose) toast('Estimation ' + (st.done + 1) + '/' + total0 + ' : ' + h.name);
+    const { r, err, why } = await offMatch(h.name);
+    st.done++;
+    if (r && state.history[k]){ state.history[k].q = normQ(r); delete state.qMiss[k]; pushHistQ(k, state.history[k]); st.found++; }
+    else if (err){ st.err++; st.why = st.why || why; qDownUntil = Date.now() + 120000; qQueue.length = 0; }
+    else { state.qMiss[k] = Date.now(); st.miss++; }
+    save(); softRender();
+    if (qQueue.length && !qCancel) await sleep(Q_DELAY);
   }
-  qBusy = false;
-  let msg;
-  if (qCancel) msg = 'Estimation arrêtée';
-  else if (errors === todo.length) msg = 'Open Food Facts ne répond pas (connexion ou accès bloqué). Réessayez plus tard.';
-  else msg = found + ' ' + plural(found,'produit trouvé','produits trouvés') + ' sur ' + todo.length + (miss ? '. ' + miss + ' sans correspondance : touchez-les pour les noter vous-même.' : '.');
-  toast(msg);
-  if (tab === 'stats') render();
+  const stopped = qCancel;
+  qRunning = false; qBusy = false; qCancel = false;
+  if (qVerbose && st.done){
+    toast(stopped ? 'Estimation arrêtée'
+      : st.err === st.done ? 'Open Food Facts ne répond pas (' + (st.why || 'connexion') + '). Faites le test dans Réglages > Open Food Facts.'
+      : st.found + ' ' + plural(st.found,'produit trouvé','produits trouvés') + ' sur ' + st.done + (st.miss ? '. ' + st.miss + ' sans correspondance : touchez-les pour les noter vous-même.' : '.'));
+  }
+  qVerbose = false;
+  softRender();
+}
+window.addEventListener('online', () => { if (qQueue.length && !qRunning) runQQueue(); });
+async function diagOff(){
+  const el = $('#sheet');
+  el.innerHTML = '<div class="sheet-bg" data-act="sheet-close"></div><div class="sheet"><h3>Test d’Open Food Facts</h3><div id="diagout" class="lbl" style="gap:10px">Test en cours, quelques secondes…</div><button type="button" class="btn soft" data-act="sheet-close">Fermer</button></div>';
+  el.hidden = false; sheetCfg = {};
+  const F = 'code,product_name,nutriscore_grade';
+  const tests = [
+    ['Fiche d’un produit (scan)', 'https://world.openfoodfacts.org/api/v2/product/3017620422003.json?fields=product_name,nutriscore_grade', 10000],
+    ['Recherche rapide', 'https://search.openfoodfacts.org/search?q=lait&langs=fr&page_size=3&fields=' + F, 12000],
+    ['Recherche classique', 'https://world.openfoodfacts.org/cgi/search.pl?search_terms=lait&search_simple=1&action=process&json=1&page_size=3&tagtype_0=countries&tag_contains_0=contains&tag_0=france&fields=' + F, 20000]
+  ];
+  const out = [];
+  for (const [label, url, ms] of tests){
+    const t0 = Date.now();
+    const r = await fetchDetail(url, ms);
+    const d = r.data;
+    const n = d ? (Array.isArray(d.hits) ? d.hits.length : Array.isArray(d.products) ? d.products.length : (d.status === 1 ? 1 : 0)) : 0;
+    out.push({ label, ok:!r.err && n > 0, err:r.err || (n ? '' : 'aucun résultat'), sec:((Date.now() - t0) / 1000).toFixed(1) });
+    const box = $('#diagout'); if (!box) return;
+    box.innerHTML = out.map(o => '<div>' + (o.ok ? '✓' : '✗') + ' ' + esc(o.label) + ' : ' + (o.ok ? 'répond en ' + o.sec + ' s' : esc(o.err)) + '</div>').join('') + (out.length < tests.length ? '<div>Test suivant…</div>' : '');
+  }
+  const box = $('#diagout'); if (!box) return;
+  const good = out.filter(o => o.ok).length, blocked = out.every(o => /bloquée/.test(o.err));
+  box.innerHTML += '<p style="margin:6px 0 0">' + (good === out.length ? 'Tout fonctionne : l’estimation et le scan peuvent utiliser Open Food Facts.'
+    : good ? 'Au moins une source répond : Caddie l’utilisera, mais certaines recherches peuvent échouer.'
+    : blocked ? 'Aucune réponse. Causes possibles : vous utilisez l’aperçu en ligne (il bloque tout accès externe), un bloqueur de publicités ou de contenu, un réseau limité, ou un navigateur trop restrictif. Ouvrez Caddie depuis votre site GitHub Pages et réessayez.'
+    : 'Le service répond mal pour l’instant (lenteur ou surcharge). Réessayez dans quelques minutes.') + '</p>';
 }
 function editQuality(key){
   const h = state.history[key]; if (!h) return;
@@ -1273,7 +1370,13 @@ function estBox(total, evaluated){
     '<button type="button" class="btn" data-act="q-estimate">Estimer ' + Math.min(n, 10) + ' ' + plural(Math.min(n, 10),'produit','produits') + '</button>' + missChips() + '</div>';
 }
 
-function historyBlock(){ return '<h2>Tous vos produits</h2>' + historyHtml(); }
+function historyBlock(){ return '<h2>Tous vos produits</h2>' + historyHtml() + clearBox(); }
+function clearBox(){
+  return '<div class="clearbox"><h2>Vider les statistiques</h2><div class="card"><p>Supprime les données qui alimentent ces graphiques. Vos listes, vos articles et vos personnes ne sont pas touchés.</p><div class="row">' +
+    '<button type="button" class="btn danger" data-act="clr-hist">Effacer l’historique des achats</button>' +
+    '<button type="button" class="btn danger" data-act="clr-q">Effacer les évaluations Nutri-Score</button>' +
+    '<button type="button" class="btn danger" data-act="clr-exp">Effacer toutes les dépenses</button></div></div></div>';
+}
 
 function shareHtml(){
   let h = '<h2>Sauvegarde et partage</h2><div class="card">';
@@ -1309,7 +1412,11 @@ function settingsHtml(){
       '<button type="button" class="arrow" data-act="down" data-i="' + i + '"' + (i === ord.length-1 ? ' disabled' : '') + ' aria-label="Descendre ' + esc(r) + '">' + ICON.down + '</button></li>').join('') + '</ul>' +
     shareHtml() +
     tplHtml() +
+    '<h2>Open Food Facts</h2><div class="card"><p>Sert à retrouver le Nutri-Score des produits (scan et estimation). Si les notes ne se calculent pas, testez la connexion.</p><div class="row"><button type="button" class="btn soft" data-act="diag-off">Tester la connexion</button></div></div>' +
     (state.share ? '' : '<h2>Tester l’appli</h2><div class="card"><p>Charge des données d’exemple (achats, prix, dépenses) pour voir les suggestions « À prévoir ? » et les statistiques. « Tout effacer » les supprime.</p><div class="row"><button type="button" class="btn" data-act="demo">Charger un exemple</button></div></div>') +
+    '<h2>Statistiques</h2><div class="card"><p>Les statistiques viennent de l’historique d’achats (produits cochés, prix, qualité) et des dépenses. Vous pouvez les remettre à zéro séparément' + (state.share ? ', pour tout le foyer puisque la liste est partagée' : '') + '. Vos listes, vos personnes et vos groupes ne changent pas.</p><div class="row">' +
+      '<button type="button" class="btn soft" data-act="clear-history">Effacer l’historique d’achats</button>' +
+      '<button type="button" class="btn soft" data-act="clear-expenses">Effacer les dépenses</button></div></div>' +
     '<h2>Vos données</h2><div class="card"><p>' + (state.share ? 'La liste partagée est conservée en ligne. Vous pouvez exporter une copie de sécurité.' : 'Exportez une copie de sécurité, ou restaurez-en une.') + '</p><div class="row">' +
       '<button type="button" class="btn soft" data-act="export">Exporter</button>' +
       (state.share ? '' : '<button type="button" class="btn soft" data-act="import">Importer</button>') +
@@ -1317,6 +1424,7 @@ function settingsHtml(){
 }
 
 function render(){
+  QCTX = null;
   const main = $('#main');
   const scroll = main.scrollTop;
   renderHeader();
@@ -1416,23 +1524,30 @@ if (SR){
 const BD = window.BarcodeDetector;
 let scanStop = null, pendingBarcode = null;
 function stopScan(){ if (scanStop){ const f = scanStop; scanStop = null; try { f(); } catch(e){} } }
-async function fetchJson(url, ms){
+let lastOffErr = '';
+async function fetchDetail(url, ms){
   const ctl = new AbortController();
-  const to = setTimeout(() => ctl.abort(), ms || 8000);
+  const to = setTimeout(() => ctl.abort(), ms || 10000);
   try {
     const r = await fetch(url, { signal:ctl.signal });
-    if (!r.ok) return null;
-    return await r.json();
-  } catch(e){ return null; }
-  finally { clearTimeout(to); }
+    if (!r.ok) return { data:null, err:'erreur ' + (r.status || 'réseau') };
+    return { data:await r.json(), err:'' };
+  } catch(e){
+    return { data:null, err:(e && e.name === 'AbortError') ? 'délai dépassé' : 'connexion bloquée ou impossible' };
+  } finally { clearTimeout(to); }
+}
+async function fetchJson(url, ms){
+  const r = await fetchDetail(url, ms);
+  lastOffErr = r.err;
+  return r.data;
 }
 async function lookupBarcode(code){
-  if (state.barcodes[code]) return { name:state.barcodes[code], ns:'', nova:0, local:true };
   const j = await fetchJson('https://world.openfoodfacts.org/api/v2/product/' + code + '.json?fields=product_name,product_name_fr,generic_name_fr,nutriscore_grade,nova_group');
+  if (j === null) return { status:'error' };
   const pr = j && j.status === 1 && j.product;
   const n = pr && (pr.product_name_fr || pr.product_name || pr.generic_name_fr);
-  if (!n) return null;
-  return { name:String(n).trim().slice(0, 50), ns:/^[a-e]$/.test(pr.nutriscore_grade) ? pr.nutriscore_grade : '', nova:parseInt(pr.nova_group, 10) || 0 };
+  if (!n) return { status:'unknown' };
+  return { status:'ok', name:String(n).trim().slice(0, 50), ns:/^[a-e]$/.test(pr.nutriscore_grade) ? pr.nutriscore_grade : '', nova:parseInt(pr.nova_group, 10) || 0 };
 }
 function setQuality(key, q){
   const h = state.history[key]; if (!h) return;
@@ -1441,25 +1556,71 @@ function setQuality(key, q){
   pushHistQ(key, h);
   save();
 }
+// Associe un code-barres à un article de la liste : note exacte, article coché, code mémorisé.
+function applyScan(it, code, info){
+  state.barcodes[code] = it.name;
+  ensureHist(it);
+  const had = info && (info.ns || info.nova);
+  if (had) setQuality(it.key, { ns:info.ns, nova:info.nova, src:'scan', ref:info.name || '' });
+  if (!it.done) toggle(it.id); else { save(); render(); }
+  let msg = cap(it.name) + ' dans le caddie';
+  if (info && info.ns) msg += ', Nutri-Score ' + info.ns.toUpperCase() + ' (scanné)';
+  else if (info && info.status === 'ok') msg += ', pas de Nutri-Score pour ce produit';
+  else if (info && info.status === 'error') msg += '. Open Food Facts n’a pas répondu (' + lastOffErr + ') : la note n’est pas mise à jour';
+  else if (info && info.status === 'unknown') msg += '. Produit inconnu d’Open Food Facts';
+  toast(msg);
+}
+function addScanned(code, info){
+  state.barcodes[code] = info.name;
+  addItem(info.name, null, 1);
+  if (info.ns || info.nova) setQuality(norm(cap(info.name)), { ns:info.ns, nova:info.nova, src:'scan', ref:info.name });
+  save(); render();
+  toast('Ajouté : ' + cap(info.name) + (info.ns ? ', Nutri-Score ' + info.ns.toUpperCase() : ''));
+}
+function itemCandidates(offName){
+  const words = norm(offName).split(/[^a-z0-9]+/).filter(Boolean).map(w => w.replace(/s$/, ''));
+  const seen = new Set();
+  return state.items.filter(i => i.listId === state.cur && !i.done).map(i => {
+    const toks = i.key.split(/[^a-z0-9]+/).filter(Boolean).map(w => w.replace(/s$/, ''));
+    return toks.length && toks.every(t => words.includes(t)) ? { it:i, score:toks.length } : null;
+  }).filter(Boolean).sort((a,b) => b.score - a.score).map(x => x.it).filter(i => !seen.has(i.key) && seen.add(i.key)).slice(0, 3);
+}
+function chooseItemSheet(code, info, cands){
+  const el = $('#sheet');
+  el.innerHTML = '<div class="sheet-bg" data-act="sheet-close"></div><div class="sheet"><h3>Quel article ?</h3><p class="lbl" style="margin:0">« ' + esc(info.name) + ' »' + (info.ns ? ', Nutri-Score ' + info.ns.toUpperCase() : '') + '. Correspond-il à un article de votre liste ?</p>' +
+    cands.map(c => '<button type="button" class="btn" data-act="scan-pick" data-id="' + esc(c.id) + '">' + esc(cap(c.name)) + '</button>').join('') +
+    '<button type="button" class="btn soft" data-act="scan-new">Non, l’ajouter comme nouvel article</button><button type="button" class="btn soft" data-act="sheet-close">Annuler</button></div>';
+  el.hidden = false;
+  sheetCfg = { scanPick:{ code, info } };
+}
 async function handleBarcode(code){
+  const known = state.barcodes[code];
+  if (known){
+    const it = state.items.find(i => i.listId === state.cur && !i.done && i.key === norm(known));
+    if (it){ applyScan(it, code, null); return; }
+  }
   toast('Code ' + code + ', recherche du produit…');
-  const r = await lookupBarcode(code);
-  if (r){
-    state.barcodes[code] = r.name;
-    addItem(r.name, null, 1);
-    if (r.ns || r.nova) setQuality(norm(cap(r.name)), { ns:r.ns, nova:r.nova, src:'scan', ref:r.name });
-    save(); render();
-    toast('Ajouté : ' + cap(r.name) + (r.ns ? ', Nutri-Score ' + r.ns.toUpperCase() : ''));
+  const info = known ? { status:'ok', name:known, ns:'', nova:0 } : await lookupBarcode(code);
+  if (info.status === 'ok'){
+    const cands = itemCandidates(info.name);
+    if (cands.length){ chooseItemSheet(code, info, cands); return; }
+    addScanned(code, info);
   } else {
     pendingBarcode = code;
-    toast('Produit inconnu. Écrivez son nom : Caddie s’en souviendra.');
+    toast(info.status === 'error' ? 'Open Food Facts ne répond pas (' + lastOffErr + '). Écrivez le nom du produit : Caddie s’en souviendra.' : 'Produit inconnu. Écrivez son nom : Caddie s’en souviendra.');
     input.focus();
   }
 }
-async function openScan(){
+async function handleItemScan(id, code){
+  const it = state.items.find(i => i.id === id); if (!it) return;
+  toast('Code ' + code + ', recherche du produit…');
+  const info = await lookupBarcode(code);
+  applyScan(it, code, info);
+}
+async function openScan(cb, title){
   if (!BD || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ toast('Le scan n’est pas disponible sur cet appareil.'); return; }
   const el = $('#sheet');
-  el.innerHTML = '<div class="sheet-bg" data-act="scan-close"></div><div class="sheet"><h3>Scanner un code-barres</h3><video id="scanvid" class="scanvid" playsinline muted></video><p class="lbl" id="scanmsg">Placez le code-barres dans le cadre.</p><button type="button" class="btn soft" data-act="scan-close">Annuler</button></div>';
+  el.innerHTML = '<div class="sheet-bg" data-act="scan-close"></div><div class="sheet"><h3>' + esc(title || 'Scanner un code-barres') + '</h3><video id="scanvid" class="scanvid" playsinline muted></video><p class="lbl" id="scanmsg">Placez le code-barres dans le cadre.</p><button type="button" class="btn soft" data-act="scan-close">Annuler</button></div>';
   el.hidden = false; sheetCfg = {};
   let stream = null, timer = null, stopped = false;
   scanStop = () => { stopped = true; clearInterval(timer); if (stream) stream.getTracks().forEach(t => t.stop()); };
@@ -1477,13 +1638,14 @@ async function openScan(){
     busy = true;
     try {
       const r = await det.detect(v);
-      if (r && r.length && !stopped){ const code = r[0].rawValue; stopScan(); closeSheet(); handleBarcode(code); }
+      if (r && r.length && !stopped){ const code = r[0].rawValue; stopScan(); closeSheet(); cb(code); }
     } catch(e){}
     busy = false;
   }, 300);
 }
+const scanOK = !!(BD && navigator.mediaDevices);
 const scanBtn = $('#scan');
-if (BD && navigator.mediaDevices){ scanBtn.hidden = false; scanBtn.addEventListener('click', openScan); }
+if (scanOK){ scanBtn.hidden = false; scanBtn.addEventListener('click', () => openScan(handleBarcode)); }
 
 /* ---------- Message temporaire ---------- */
 let toastTimer;
@@ -1856,7 +2018,7 @@ function openSheet(cfg){
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && sheetCfg) closeSheet(); });
 
-function goList(id){ state.cur = id; tab = 'list'; save(); render(); $('#main').scrollTop = 0; }
+function goList(id){ state.cur = id; tab = 'list'; save(); render(); $('#main').scrollTop = 0; queueQuality(listQueueKeys(id)); }
 function addItemsToList(listId, entries){
   entries.forEach(e => {
     const it = { id:uid(), name:e.name, key:norm(e.name), listId, rayon:e.rayon, qty:e.qty || 1, price:e.price || 0, done:false, doneTs:null, ts:Date.now(), by:state.me || '' };
@@ -2240,9 +2402,58 @@ $('#app').addEventListener('click', e => {
     }
     case 'backup-go': tab = 'settings'; render(); $('#main').scrollTop = 0; break;
     case 'backup-later': state.hintBackup = true; save(); render(); break;
+    case 'clr-hist': {
+      const n = Object.keys(state.history).length;
+      if (!n){ toast('L’historique est déjà vide.'); break; }
+      if (confirm('Effacer l’historique des achats, des prix et des ajouts (' + n + ' ' + plural(n,'produit','produits') + ') ? Les listes et les dépenses restent.' + (state.share ? ' Pour tout le foyer.' : ''))){
+        Object.keys(state.history).forEach(k => delHist(k));
+        state.history = {}; state.qMiss = {}; state.dismissed = {}; qQueue = []; save(); render(); toast('Historique effacé');
+      }
+      break;
+    }
+    case 'clr-q': {
+      const ks = Object.keys(state.history).filter(k => state.history[k].q);
+      if (!ks.length){ toast('Aucune évaluation à effacer.'); break; }
+      if (confirm('Effacer les ' + ks.length + ' évaluations Nutri-Score ?' + (state.share ? ' Pour tout le foyer.' : ''))){
+        ks.forEach(k => { state.history[k].q = null; pushHistQ(k, state.history[k]); });
+        state.qMiss = {}; qQueue = []; save(); render(); toast('Évaluations effacées');
+      }
+      break;
+    }
+    case 'clr-exp': {
+      const n = state.expenses.length;
+      if (!n){ toast('Il n’y a aucune dépense à effacer.'); break; }
+      if (confirm('Effacer les ' + n + ' dépenses et remboursements, dans tous les groupes ?' + (state.share ? ' Pour tout le foyer.' : ''))){
+        state.expenses.forEach(e => delExpense(e.id));
+        state.expenses = []; save(); render(); toast('Dépenses effacées');
+      }
+      break;
+    }
+    case 'diag-off': diagOff(); break;
     case 'q-edit': editQuality(key); break;
-    case 'q-estimate': estimateMissing(); render(); break;
+    case 'q-estimate': queueQuality(needsEstimate().sort((a,b) => b[1].dates.length - a[1].dates.length).slice(0, 10).map(x => x[0]), true); render(); break;
+    case 'q-list': queueQuality(listQueueKeys(state.cur), true); render(); break;
     case 'q-stop': qCancel = true; break;
+    case 'clear-history': {
+      const n = Object.keys(state.history).length;
+      if (!n){ toast('L’historique d’achats est déjà vide.'); break; }
+      if (confirm('Effacer tout l’historique d’achats (' + n + ' ' + plural(n,'produit','produits') + ')' + (state.share ? ' pour tout le foyer' : '') + ' ? Les suggestions « À prévoir » et les statistiques d’achats repartent de zéro. Vos listes ne changent pas.')){
+        Object.keys(state.history).forEach(k => delHist(k));
+        state.history = {}; state.dismissed = {}; state.qMiss = {};
+        save(); render(); toast('Historique d’achats effacé');
+      }
+      break;
+    }
+    case 'clear-expenses': {
+      const n = state.expenses.length;
+      if (!n){ toast('Il n’y a aucune dépense à effacer.'); break; }
+      if (confirm('Effacer les ' + n + ' ' + plural(n,'dépense','dépenses') + ' de tous les groupes' + (state.share ? ' pour tout le foyer' : '') + ' ? Les personnes et les groupes sont conservés.')){
+        state.expenses.forEach(e => delExpense(e.id));
+        state.expenses = [];
+        save(); render(); toast('Dépenses effacées');
+      }
+      break;
+    }
     case 'stat-range': state.statRange = t.dataset.r; save(); render(); break;
     case 'grp': state.curGroup = id; state.expCat = 'all'; save(); render(); break;
     case 'new-group': newGroup(); break;
@@ -2292,6 +2503,9 @@ $('#app').addEventListener('click', e => {
     case 'edit-folder': editFolder(id); break;
     case 'toggle-folder': state.collapsed[id] = !state.collapsed[id]; save(); render(); break;
     case 'sheet-close': case 'scan-close': closeSheet(); break;
+    case 'scan-item': { const it = state.items.find(x => x.id === id); if (it) openScan(code => handleItemScan(id, code), 'Scanner : ' + cap(it.name)); break; }
+    case 'scan-pick': { const sp = sheetCfg && sheetCfg.scanPick; const it = state.items.find(x => x.id === id); if (sp && it){ closeSheet(); applyScan(it, sp.code, sp.info); } break; }
+    case 'scan-new': { const sp = sheetCfg && sheetCfg.scanPick; if (sp){ closeSheet(); addScanned(sp.code, sp.info); } break; }
     case 'sheet-delete': if (sheetCfg && sheetCfg.onDelete) sheetCfg.onDelete(); break;
     case 'share-create': createHousehold(); break;
     case 'share-join': joinHousehold(($('#joincode') || {}).value); break;
