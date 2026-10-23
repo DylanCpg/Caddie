@@ -201,7 +201,12 @@ ul.list > li + li{border-top:1px solid var(--line)}
 .empty b{display:block;color:var(--ink);font-family:var(--serif);font-size:1.25rem;font-weight:600;margin-bottom:6px}
 
 /* Historique */
-.hrow{display:flex;align-items:center;gap:10px;padding:14px 8px 14px 16px}
+.hrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:14px 8px 12px 16px}
+.hactions{flex-basis:100%;display:flex;flex-wrap:wrap;gap:8px;padding-right:8px}
+.chipbtn{padding:9px 14px;border-radius:99px;background:var(--raise);border:1px solid var(--line);font-weight:600;font-size:.85rem;color:var(--ink);min-height:40px}
+.chipbtn.main{border-color:var(--accent);color:var(--accent)}
+.chipbtn[disabled]{opacity:.5;cursor:default}
+.hrow .q{color:var(--ink-2);font-size:.84rem;margin-top:2px}
 .hrow .txt{flex:1;min-width:0}
 .hrow .t{font-weight:600;font-size:1.04rem}
 .hrow .r{color:var(--accent);font-size:.8rem;font-weight:500}
@@ -1049,10 +1054,16 @@ function historyHtml(){
     const onList = state.items.some(i => i.key === k && !i.done && inCur(i));
     const n = h.dates.length;
     let line = 'Acheté ' + n + ' ' + plural(n,'fois','fois') + (s ? ', en général ' + everyText(s.avg) : '') + '. Dernier achat : ' + agoText((Date.now() - last) / DAY) + '.';
-    return '<li class="hrow"><div class="txt"><div class="t">' + esc(h.name) + '</div><div class="r">' + esc(h.rayon) + '</div><div class="d">' + esc(line) + '</div></div>' +
-      '<button type="button" class="qbtn" data-act="q-edit" data-key="' + esc(k) + '" aria-label="Qualité de ' + esc(h.name) + (h.q && h.q.ns ? ' : Nutri-Score ' + h.q.ns.toUpperCase() : ' : non évaluée') + '">' + ((h.q && h.q.ns) ? nsBadge(h.q.ns) : '<span class="ns" style="background:var(--raise);color:var(--ink-2)">?</span>') + '</button>' +
-      '<button type="button" class="btn' + (onList ? ' soft' : '') + '"' + (onList ? ' disabled' : '') + ' data-act="hist-add" data-key="' + esc(k) + '">' + (onList ? 'Dans la liste' : 'Ajouter') + '</button>' +
-      '<button type="button" class="rm" data-act="hist-del" data-key="' + esc(k) + '" aria-label="Oublier ' + esc(h.name) + '">' + ICON.x + '</button></li>';
+    const busy = qOne === k;
+    const qline = h.q ? ((h.q.ns ? 'Nutri-Score ' + h.q.ns.toUpperCase() : 'Niveau NOVA ' + h.q.nova) + ', ' + SRC_LAB[h.q.src || 'scan'] + (h.q.src === 'match' && h.q.ref ? ' (proche de ' + h.q.ref + ')' : '')) : (h.rayon === FRESH ? 'Produit frais : pas de Nutri-Score' : 'Pas encore évalué');
+    return '<li class="hrow"><div class="txt"><div class="t">' + esc(h.name) + '</div><div class="r">' + esc(h.rayon) + '</div><div class="d">' + esc(line) + '</div><div class="q">' + esc(qline) + '</div></div>' +
+      '<button type="button" class="qbtn" data-act="q-edit" data-key="' + esc(k) + '" aria-label="Corriger la qualité de ' + esc(h.name) + (h.q && h.q.ns ? ' : Nutri-Score ' + h.q.ns.toUpperCase() : ' : non évaluée') + '">' + ((h.q && h.q.ns) ? nsBadge(h.q.ns, '', h.q.src !== 'scan' && h.q.src !== 'manuel') : '<span class="ns" style="background:var(--raise);color:var(--ink-2)">?</span>') + '</button>' +
+      '<button type="button" class="rm" data-act="hist-del" data-key="' + esc(k) + '" aria-label="Oublier ' + esc(h.name) + '">' + ICON.x + '</button>' +
+      '<div class="hactions">' +
+        '<button type="button" class="chipbtn main" data-act="q-one" data-key="' + esc(k) + '"' + ((busy || qRunning) ? ' disabled' : '') + '>' + (busy ? 'Recherche en cours…' : (h.q ? 'Chercher à nouveau' : 'Chercher le Nutri-Score')) + '</button>' +
+        (scanOK ? '<button type="button" class="chipbtn" data-act="q-scan" data-key="' + esc(k) + '">Scanner</button>' : '') +
+        '<button type="button" class="chipbtn" data-act="hist-add" data-key="' + esc(k) + '"' + (onList ? ' disabled' : '') + '>' + (onList ? 'Dans la liste' : 'Ajouter à la liste') + '</button>' +
+      '</div></li>';
   }).join('') + '</ul>';
 }
 
@@ -1289,7 +1300,7 @@ function analyse(list){
   return { ns:gs.length ? NS[median(gs)] : '', nova:nv.length ? median(nv) : 0, src:'match', ref:String(ref).slice(0,60) };
 }
 // Essaie : recherche rapide, recherche classique en France, variante du nom, puis le monde entier.
-async function offMatch(name){
+async function offMatch(name, delayMs){
   const v = nameVariants(name);
   const alt = v[1] !== v[0] ? v[1] : (v[2] !== v[0] ? v[2] : null);
   let tries;
@@ -1301,7 +1312,7 @@ async function offMatch(name){
   }
   let anyOk = false, why = '', errs = 0;
   for (let i = 0; i < tries.length && !qCancel; i++){
-    if (i > 0) await sleep(Q_DELAY);
+    if (i > 0) await sleep(delayMs === undefined ? Q_DELAY : delayMs);
     const r = await offSearch(tries[i][0], tries[i][1]);
     if (!r.err) anyOk = true; else { errs++; if (!why) why = r.err; }
     const a = analyse(r.list);
@@ -1421,6 +1432,59 @@ async function diagOff(){
     : good ? 'Au moins une source répond : Caddie l’utilisera, mais certaines recherches peuvent échouer.'
     : blocked ? 'Aucune réponse. Causes possibles : vous utilisez l’aperçu en ligne (il bloque tout accès externe), un bloqueur de publicités ou de contenu, un réseau limité, ou un navigateur trop restrictif. Ouvrez Caddie depuis votre site GitHub Pages et réessayez.'
     : 'Le service répond mal pour l’instant (lenteur ou surcharge). Réessayez dans quelques minutes.') + '</p>';
+}
+let qOne = '';
+async function searchOne(key){
+  const h = state.history[key]; if (!h) return;
+  if (qRunning || qOne){ toast('Une recherche est déjà en cours, patientez un instant.'); return; }
+  const fin = (r) => (r.ns ? 'Nutri-Score ' + r.ns.toUpperCase() : 'niveau NOVA ' + r.nova);
+  const noter = () => (scanOK ? ['Scanner', () => scanForKey(key)] : ['Noter', () => editQuality(key)]);
+  qOne = key; render();
+  try {
+    const lm = localMatch(key);
+    if (lm){
+      hSetQ(key, lm); delete state.qMiss[key]; save();
+      toast(cap(h.name) + ' : ' + fin(lm) + ', proche de ' + lm.ref);
+      return;
+    }
+    toast('Recherche de « ' + h.name + ' »…');
+    const { r, err, why } = await offMatch(h.name, Math.min(Q_DELAY, 1500));
+    if (r){
+      hSetQ(key, r); delete state.qMiss[key]; state.searchBlocked = 0; save();
+      toast(cap(h.name) + ' : ' + fin(r) + (r.ref ? ', proche de « ' + r.ref + ' »' : ''));
+    } else if (err){
+      if (/bloquée/.test(why || '') && !state.relay) state.searchBlocked = Date.now() + 24 * 3600 * 1000;
+      save();
+      const [lab, fn] = noter();
+      toast('La recherche par nom est bloquée (' + (why || 'connexion') + '). Scannez le produit pour sa vraie note, ou notez-la vous-même.', lab, fn);
+    } else {
+      state.qMiss[key] = Date.now(); save();
+      const [lab, fn] = noter();
+      toast('Aucun produit proche trouvé pour « ' + h.name + ' ».', lab, fn);
+    }
+  } finally {
+    qOne = '';
+    if (['stats','list','lists'].includes(tab)) render();
+  }
+}
+// Scanne le code-barres d'un produit de l'historique pour lui donner sa vraie note.
+function scanForKey(key){
+  const h = state.history[key]; if (!h) return;
+  openScan(async code => {
+    toast('Code ' + code + ', recherche du produit…');
+    const info = await lookupBarcode(code);
+    if (info.status === 'ok'){
+      state.barcodes[code] = h.name;
+      if (info.ns || info.nova){
+        setQuality(key, { ns:info.ns, nova:info.nova, src:'scan', ref:info.name });
+        toast(cap(h.name) + ' : ' + (info.ns ? 'Nutri-Score ' + info.ns.toUpperCase() : 'niveau NOVA ' + info.nova) + ' (scanné)');
+      } else toast('Ce produit n’a pas de Nutri-Score sur Open Food Facts.');
+      save();
+    } else {
+      toast(info.status === 'error' ? 'Open Food Facts n’a pas répondu (' + lastOffErr + ').' : 'Produit inconnu d’Open Food Facts : notez sa qualité vous-même.');
+    }
+    render();
+  }, 'Scanner : ' + cap(h.name));
 }
 function editQuality(key){
   const h = state.history[key]; if (!h) return;
@@ -2693,6 +2757,8 @@ $('#app').addEventListener('click', e => {
       }
       break;
     }
+    case 'q-one': searchOne(key); break;
+    case 'q-scan': scanForKey(key); break;
     case 'diag-off': diagOff(); break;
     case 'relay-save': {
       const v = (($('#relay') || {}).value || '').trim();
