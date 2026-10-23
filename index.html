@@ -469,6 +469,9 @@ button.txtcol{background:none;text-align:left;align-items:flex-start;padding:10p
 .estbox .btn{margin-top:10px}
 .estbox p{margin:0}
 
+.qbtn{flex:none;width:44px;height:44px;display:grid;place-items:center;border-radius:12px}
+.qbtn:active{background:var(--raise)}
+
 @media (prefers-reduced-motion: reduce){
   *{transition:none !important;animation:none !important}
 }
@@ -624,7 +627,7 @@ function normTemplate(t){
 }
 function normalizeState(s){
   const o = { items:[], history:{}, dismissed:{}, order:RAYONS.slice(), share:null, me:'', folders:[], lists:[], cur:'main', collapsed:{},
-    people:[], expenses:[], meId:'', expCat:'all', groups:[], curGroup:'main', templates:[], barcodes:{}, statRange:'90', hintBackup:false };
+    people:[], expenses:[], meId:'', expCat:'all', groups:[], curGroup:'main', templates:[], barcodes:{}, statRange:'90', hintBackup:false, qMiss:{} };
   const defList = { id:'main', name:'Courses', folderId:null, ts:0 };
   const defGroup = { id:'main', name:'Général', ts:0 };
   if (s && typeof s === 'object'){
@@ -646,6 +649,7 @@ function normalizeState(s){
     if (s.barcodes && typeof s.barcodes === 'object') for (const [c,n] of Object.entries(s.barcodes)) if (/^\d{6,14}$/.test(c) && typeof n === 'string') o.barcodes[c] = n.slice(0,60);
     if (['30','90','365','all'].includes(s.statRange)) o.statRange = s.statRange;
     o.hintBackup = !!s.hintBackup;
+    if (s.qMiss && typeof s.qMiss === 'object') for (const [k,t] of Object.entries(s.qMiss)) if (Number(t) > 0) o.qMiss[k] = Number(t);
     if (Array.isArray(s.items)){
       o.items = s.items.filter(i => i && i.name && i.id).map(i => ({
         id:String(i.id), name:String(i.name), key:norm(i.name),
@@ -926,6 +930,7 @@ function historyHtml(){
     const n = h.dates.length;
     let line = 'Acheté ' + n + ' ' + plural(n,'fois','fois') + (s ? ', en général ' + everyText(s.avg) : '') + '. Dernier achat : ' + agoText((Date.now() - last) / DAY) + '.';
     return '<li class="hrow"><div class="txt"><div class="t">' + esc(h.name) + '</div><div class="r">' + esc(h.rayon) + '</div><div class="d">' + esc(line) + '</div></div>' +
+      '<button type="button" class="qbtn" data-act="q-edit" data-key="' + esc(k) + '" aria-label="Qualité de ' + esc(h.name) + (h.q && h.q.ns ? ' : Nutri-Score ' + h.q.ns.toUpperCase() : ' : non évaluée') + '">' + ((h.q && h.q.ns) ? nsBadge(h.q.ns) : '<span class="ns" style="background:var(--raise);color:var(--ink-2)">?</span>') + '</button>' +
       '<button type="button" class="btn' + (onList ? ' soft' : '') + '"' + (onList ? ' disabled' : '') + ' data-act="hist-add" data-key="' + esc(k) + '">' + (onList ? 'Dans la liste' : 'Ajouter') + '</button>' +
       '<button type="button" class="rm" data-act="hist-del" data-key="' + esc(k) + '" aria-label="Oublier ' + esc(h.name) + '">' + ICON.x + '</button></li>';
   }).join('') + '</ul>';
@@ -1112,22 +1117,48 @@ function effQuality(h, avgs){
   const a = avgs[h.rayon];
   return a && (a.ns || a.nova) ? { ns:a.ns, nova:a.nova, src:'avg' } : null;
 }
-const needsEstimate = () => Object.entries(state.history).filter(([k,h]) => h.dates.length && !h.q && h.rayon !== FRESH);
+const needsEstimate = () => Object.entries(state.history).filter(([k,h]) => h.dates.length && !h.q && h.rayon !== FRESH && !(state.qMiss[k] && Date.now() - state.qMiss[k] < 3 * DAY));
+const missList = () => Object.keys(state.qMiss).filter(k => state.history[k] && !state.history[k].q && state.history[k].dates.length);
 
 const Q_DELAY = (typeof window.__caddieQDelay === 'number') ? window.__caddieQDelay : 6500;
 let qBusy = false, qCancel = false;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 function median(arr){ const a = arr.slice().sort((x,y) => x - y); return a.length ? a[Math.floor((a.length - 1) / 2)] : 0; }
-async function offMatch(name){
-  const url = 'https://world.openfoodfacts.org/cgi/search.pl?search_terms=' + encodeURIComponent(name) +
-    '&search_simple=1&action=process&json=1&page_size=12&sort_by=unique_scans_n&tagtype_0=countries&tag_contains_0=contains&tag_0=france&fields=code,product_name,nutriscore_grade,nova_group';
+function nameVariants(name){
+  const n = name.trim();
+  const noAcc = n.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const sing = noAcc.replace(/s$/i, '');
+  return [...new Set([n, noAcc, sing.length > 3 ? sing : noAcc])];
+}
+async function offSearch(term, france){
+  const url = 'https://world.openfoodfacts.org/cgi/search.pl?search_terms=' + encodeURIComponent(term) +
+    '&search_simple=1&action=process&json=1&page_size=24&sort_by=unique_scans_n' +
+    (france ? '&tagtype_0=countries&tag_contains_0=contains&tag_0=france' : '') + '&fields=code,product_name,nutriscore_grade,nova_group';
   const j = await fetchJson(url, 9000);
-  const list = (j && Array.isArray(j.products)) ? j.products : [];
+  return { err:j === null, list:(j && Array.isArray(j.products)) ? j.products : [] };
+}
+function analyse(list){
   const gs = list.map(x => NS.indexOf(x.nutriscore_grade)).filter(i => i >= 0);
   const nv = list.map(x => parseInt(x.nova_group, 10)).filter(n => n >= 1 && n <= 4);
   if (!gs.length && !nv.length) return null;
-  const ref = (list.find(x => x.product_name) || {}).product_name || '';
+  const ref = (list.find(x => x.product_name && NS.includes(x.nutriscore_grade)) || list.find(x => x.product_name) || {}).product_name || '';
   return { ns:gs.length ? NS[median(gs)] : '', nova:nv.length ? median(nv) : 0, src:'match', ref:String(ref).slice(0,60) };
+}
+// Essaie : le nom en France, une variante du nom en France, puis le nom dans le monde entier.
+async function offMatch(name){
+  const v = nameVariants(name);
+  const tries = [[v[0], true]];
+  if (v[1] !== v[0]) tries.push([v[1], true]); else if (v[2] !== v[0]) tries.push([v[2], true]);
+  tries.push([v[0], false]);
+  let anyOk = false;
+  for (let i = 0; i < tries.length && !qCancel; i++){
+    if (i > 0) await sleep(Q_DELAY);
+    const r = await offSearch(tries[i][0], tries[i][1]);
+    if (!r.err) anyOk = true;
+    const a = analyse(r.list);
+    if (a) return { r:a, err:false };
+  }
+  return { r:null, err:!anyOk };
 }
 async function estimateMissing(){
   if (qBusy) return;
@@ -1135,16 +1166,23 @@ async function estimateMissing(){
   const todo = needsEstimate().sort((a,b) => b[1].dates.length - a[1].dates.length).slice(0, 10);
   if (!todo.length){ toast('Rien à estimer pour le moment.'); return; }
   qBusy = true; qCancel = false;
-  let found = 0;
+  let found = 0, errors = 0, miss = 0;
   for (let i = 0; i < todo.length && !qCancel; i++){
     const [k,h] = todo[i];
     toast('Estimation ' + (i + 1) + '/' + todo.length + ' : ' + h.name);
-    const r = await offMatch(h.name);
-    if (r && state.history[k]){ state.history[k].q = normQ(r); pushHistQ(k, state.history[k]); save(); found++; if (tab === 'stats') render(); }
+    const { r, err } = await offMatch(h.name);
+    if (r && state.history[k]){ state.history[k].q = normQ(r); delete state.qMiss[k]; pushHistQ(k, state.history[k]); found++; }
+    else if (err) errors++;
+    else { state.qMiss[k] = Date.now(); miss++; }
+    save(); if (tab === 'stats') render();
     if (i < todo.length - 1 && !qCancel) await sleep(Q_DELAY);
   }
   qBusy = false;
-  toast(qCancel ? 'Estimation arrêtée' : 'Estimation terminée : ' + found + ' ' + plural(found,'produit trouvé','produits trouvés') + ' sur ' + todo.length);
+  let msg;
+  if (qCancel) msg = 'Estimation arrêtée';
+  else if (errors === todo.length) msg = 'Open Food Facts ne répond pas (connexion ou accès bloqué). Réessayez plus tard.';
+  else msg = found + ' ' + plural(found,'produit trouvé','produits trouvés') + ' sur ' + todo.length + (miss ? '. ' + miss + ' sans correspondance : touchez-les pour les noter vous-même.' : '.');
+  toast(msg);
   if (tab === 'stats') render();
 }
 function editQuality(key){
@@ -1221,12 +1259,18 @@ function qualityHtml(buys){
   if (good.length) h += chartCard('Vos bons réflexes', 'Nutri-Score A ou B, peu transformés', '<ul class="qlist">' + good.map(row).join('') + '</ul>');
   return h;
 }
+function missChips(){
+  const m = missList();
+  if (!m.length) return '';
+  return '<p style="margin-top:12px">Sans correspondance trouvée (touchez pour noter vous-même) :</p><div class="chipset" style="margin-top:8px">' +
+    m.map(k => '<button type="button" data-act="q-edit" data-key="' + esc(k) + '">' + esc(state.history[k].name) + '</button>').join('') + '</div>';
+}
 function estBox(total, evaluated){
   const n = needsEstimate().length;
   if (qBusy) return '<div class="estbox"><p>Estimation en cours…</p><button type="button" class="btn soft" data-act="q-stop">Arrêter</button></div>';
-  if (!n) return '<div class="estbox"><p>Les produits scannés donnent une qualité exacte. Les autres sont estimés par la moyenne de leur rayon.</p></div>';
-  return '<div class="estbox"><p>' + n + ' ' + plural(n,'produit n’est','produits ne sont') + ' pas évalué' + (n > 1 ? 's' : '') + '. Caddie peut les rapprocher de produits existants (les plus scannés en France sur Open Food Facts), 10 à la fois. Sans résultat, la moyenne de votre rayon est utilisée. Touchez un produit de la liste pour corriger une estimation.</p>' +
-    '<button type="button" class="btn" data-act="q-estimate">Estimer ' + Math.min(n, 10) + ' ' + plural(Math.min(n, 10),'produit','produits') + '</button></div>';
+  if (!n) return '<div class="estbox"><p>Les produits scannés donnent une qualité exacte. Les autres sont estimés par la moyenne de leur rayon.</p>' + missChips() + '</div>';
+  return '<div class="estbox"><p>' + n + ' ' + plural(n,'produit n’est','produits ne sont') + ' pas évalué' + (n > 1 ? 's' : '') + '. Caddie peut les rapprocher de produits existants (les plus scannés en France sur Open Food Facts, puis dans le monde), 10 à la fois, ce qui prend environ une minute. Sans résultat, la moyenne de votre rayon est utilisée.</p>' +
+    '<button type="button" class="btn" data-act="q-estimate">Estimer ' + Math.min(n, 10) + ' ' + plural(Math.min(n, 10),'produit','produits') + '</button>' + missChips() + '</div>';
 }
 
 function historyBlock(){ return '<h2>Tous vos produits</h2>' + historyHtml(); }
@@ -1328,7 +1372,7 @@ $('#addform').addEventListener('submit', e => {
   const v = input.value.trim();
   if (!v) return;
   const parts = v.split(',').map(s => s.trim()).filter(Boolean);
-  parts.forEach(p => { const { name, qty } = parseEntry(p); addItem(name, parts.length === 1 ? rayonSel.value : null, qty);
+  parts.forEach(p => { const { name, qty } = parseEntry(p); addItem(name, (parts.length === 1 && manualRayon) ? rayonSel.value : null, qty);
     if (pendingBarcode && parts.length === 1){ state.barcodes[pendingBarcode] = cap(name); pendingBarcode = null; save(); } });
   input.value = '';
   manualRayon = false;
@@ -1393,6 +1437,7 @@ async function lookupBarcode(code){
 function setQuality(key, q){
   const h = state.history[key]; if (!h) return;
   h.q = normQ(q);
+  delete state.qMiss[key];
   pushHistQ(key, h);
   save();
 }
