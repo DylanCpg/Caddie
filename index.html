@@ -689,7 +689,7 @@ function renamePrivateDefaults(st){
 }
 function normalizeState(s){
   const o = { items:[], history:{}, hp:{}, dismissed:{}, order:RAYONS.slice(), me:'', folders:[], lists:[], cur:'main', collapsed:{},
-    people:[], expenses:[], meIds:{}, expCat:'all', groups:[], curGroup:'main', templates:[], barcodes:{}, statRange:'90', hintBackup:false, qMiss:{}, spaces:[], boot:{}, relay:'', searchBlocked:0 };
+    people:[], expenses:[], meIds:{}, expCat:'all', groups:[], curGroup:'main', templates:[], barcodes:{}, statRange:'90', hintBackup:false, qMiss:{}, spaces:[], boot:{}, relay:'', searchBlocked:0, offLog:[] };
   const defList = { id:'main', name:'Courses', folderId:null, space:'', ts:0 };
   const defGroup = { id:'main', name:'Général', space:'', ts:0 };
   if (s && typeof s === 'object'){
@@ -723,6 +723,7 @@ function normalizeState(s){
     o.hintBackup = !!s.hintBackup;
     if (typeof s.relay === 'string' && /^https:\/\/[^\s]{4,200}$/.test(s.relay)) o.relay = s.relay;
     o.searchBlocked = Number(s.searchBlocked) > 0 ? Number(s.searchBlocked) : 0;
+    if (Array.isArray(s.offLog)) o.offLog = s.offLog.filter(x => x && typeof x.l === 'string').slice(-12).map(x => ({ t:Number(x.t) || 0, l:String(x.l).slice(0,180) }));
     if (s.qMiss && typeof s.qMiss === 'object') for (const [k,t] of Object.entries(s.qMiss)) if (Number(t) > 0) o.qMiss[k] = Number(t);
     if (Array.isArray(s.items)){
       o.items = s.items.filter(i => i && i.name && i.id).map(i => {
@@ -1278,48 +1279,57 @@ function nameVariants(name){
   const sing = noAcc.replace(/s$/i, '');
   return [...new Set([n, noAcc, sing.length > 3 ? sing : noAcc])];
 }
+const MODE_LAB = { relay:'Relais', sal:'Recherche rapide', lite:'Recherche légère', fr:'Recherche classique (France)', world:'Recherche classique (monde)' };
 async function offSearch(term, mode){
-  const F = 'code,product_name,nutriscore_grade,nova_group';
-  const url = mode === 'relay'
-    ? state.relay + (state.relay.includes('?') ? '&' : '?') + 'q=' + encodeURIComponent(term)
-    : mode === 'sal'
-    ? 'https://search.openfoodfacts.org/search?q=' + encodeURIComponent(term) + '&langs=fr&page_size=24&fields=' + F
-    : 'https://world.openfoodfacts.org/cgi/search.pl?search_terms=' + encodeURIComponent(term) + '&search_simple=1&action=process&json=1&page_size=24&sort_by=unique_scans_n' +
-      (mode === 'fr' ? '&tagtype_0=countries&tag_contains_0=contains&tag_0=france' : '') + '&fields=' + F;
+  const F = 'code,product_name,nutriscore_grade,nutrition_grades,nutriscore_data,nova_group,nova_groups';
+  const T = encodeURIComponent(term);
+  const cgi = 'https://world.openfoodfacts.org/cgi/search.pl?search_terms=' + T + '&search_simple=1&action=process&json=1&fields=' + F;
+  const url = mode === 'relay' ? state.relay + (state.relay.includes('?') ? '&' : '?') + 'q=' + T
+    : mode === 'sal' ? 'https://search.openfoodfacts.org/search?q=' + T + '&langs=fr&page_size=20&fields=' + F
+    : mode === 'lite' ? cgi + '&page_size=12'
+    : cgi + '&page_size=24&sort_by=unique_scans_n' + (mode === 'fr' ? '&tagtype_0=countries&tag_contains_0=contains&tag_0=france' : '');
   const ms = mode === 'sal' ? 12000 : 20000;
+  const t0 = Date.now();
   let r = await fetchDetail(url, ms);
   if (r.err && /erreur (429|503)/.test(r.err)){ await sleep(Math.min(Q_DELAY, 5000)); r = await fetchDetail(url, ms); }
   const d = r.data;
-  return { err:r.err, list:d ? (Array.isArray(d.hits) ? d.hits : Array.isArray(d.products) ? d.products : []) : [] };
+  const list = d ? (Array.isArray(d.hits) ? d.hits : Array.isArray(d.products) ? d.products : []) : [];
+  offLogAdd(MODE_LAB[mode] + ', « ' + term + ' » : ' + (r.err || (list.length ? list.length + ' résultats' : 'aucun résultat')) + ' (' + ((Date.now() - t0) / 1000).toFixed(1) + ' s)');
+  return { err:r.err, list };
 }
 function analyse(list){
-  const gs = list.map(x => NS.indexOf(x.nutriscore_grade)).filter(i => i >= 0);
-  const nv = list.map(x => parseInt(x.nova_group, 10)).filter(n => n >= 1 && n <= 4);
+  const gs = list.map(x => NS.indexOf(gradeOf(x))).filter(i => i >= 0);
+  const nv = list.map(novaOf).filter(n => n >= 1 && n <= 4);
   if (!gs.length && !nv.length) return null;
-  const ref = (list.find(x => x.product_name && NS.includes(x.nutriscore_grade)) || list.find(x => x.product_name) || {}).product_name || '';
+  const ref = (list.find(x => x.product_name && gradeOf(x)) || list.find(x => x.product_name) || {}).product_name || '';
   return { ns:gs.length ? NS[median(gs)] : '', nova:nv.length ? median(nv) : 0, src:'match', ref:String(ref).slice(0,60) };
 }
-// Essaie : recherche rapide, recherche classique en France, variante du nom, puis le monde entier.
-async function offMatch(name, delayMs){
+// Essaie : recherche légère, recherche rapide, recherche classique en France, variante du nom, puis le monde entier.
+// Avec plusieurs « rounds », on recommence : le serveur d'Open Food Facts répond souvent par intermittence.
+async function offMatch(name, delayMs, rounds, onTry){
   const v = nameVariants(name);
   const alt = v[1] !== v[0] ? v[1] : (v[2] !== v[0] ? v[2] : null);
-  let tries;
-  if (state.relay){ tries = [[v[0], 'relay']]; if (alt) tries.push([alt, 'relay']); }
+  let seq;
+  if (state.relay){ seq = [[v[0], 'relay']]; if (alt) seq.push([alt, 'relay']); }
   else {
-    tries = [[v[0], 'sal'], [v[0], 'fr']];
-    if (alt) tries.push([alt, 'sal']);
-    tries.push([v[0], 'world']);
+    seq = [[v[0], 'lite'], [v[0], 'sal'], [v[0], 'fr']];
+    if (alt) seq.push([alt, 'lite']);
+    seq.push([v[0], 'world']);
   }
-  let anyOk = false, why = '', errs = 0;
-  for (let i = 0; i < tries.length && !qCancel; i++){
-    if (i > 0) await sleep(delayMs === undefined ? Q_DELAY : delayMs);
-    const r = await offSearch(tries[i][0], tries[i][1]);
+  const tries = [];
+  for (let r = 0; r < (rounds || 1); r++) tries.push(...seq);
+  let anyOk = false, why = '', errs = 0, n = 0;
+  for (const [term, mode] of tries){
+    if (qCancel) break;
+    if (n > 0) await sleep(delayMs === undefined ? Q_DELAY : delayMs);
+    if (onTry) onTry(n + 1, tries.length);
+    const r = await offSearch(term, mode); n++;
     if (!r.err) anyOk = true; else { errs++; if (!why) why = r.err; }
     const a = analyse(r.list);
-    if (a) return { r:a, err:false, why:'' };
-    if (errs >= 2 && !anyOk) break;
+    if (a) return { r:a, err:false, why:'', tries:n };
+    if ((rounds || 1) <= 1 && errs >= 2 && !anyOk) break;
   }
-  return { r:null, err:!anyOk, why };
+  return { r:null, err:!anyOk, why, tries:n };
 }
 const STOPW = new Set(['de','du','des','la','le','les','au','aux','a','et','en','un','une','l','d','pour','sans','avec','bio','nature']);
 function nameTokens(name){
@@ -1373,6 +1383,7 @@ async function runQQueue(){
   if (qRunning) return;
   qRunning = true; qBusy = true; qCancel = false;
   const st = { found:0, miss:0, err:0, done:0, why:'' }, total0 = qQueue.length;
+  let errStreak = 0;
   softRender();
   while (qQueue.length && !qCancel && navigator.onLine){
     const k = qQueue.shift(), h = state.history[k];
@@ -1383,8 +1394,14 @@ async function runQQueue(){
     if (qVerbose) toast('Estimation ' + (st.done + 1) + '/' + total0 + ' : ' + h.name);
     const { r, err, why } = await offMatch(h.name);
     st.done++;
-    if (r && state.history[k]){ hSetQ(k, r); delete state.qMiss[k]; st.found++; }
-    else if (err){ st.err++; st.why = st.why || why; qDownUntil = Date.now() + 120000; qQueue.length = 0; if (/bloquée/.test(why || '') && !state.relay) state.searchBlocked = Date.now() + 24 * 3600 * 1000; }
+    if (r && state.history[k]){ hSetQ(k, r); delete state.qMiss[k]; st.found++; errStreak = 0; state.searchBlocked = 0; }
+    else if (err){
+      st.err++; st.why = st.why || why; errStreak++;
+      if (!qVerbose || errStreak >= 4){
+        qDownUntil = Date.now() + 120000; qQueue.length = 0;
+        if (/bloquée/.test(why || '') && !state.relay) state.searchBlocked = Date.now() + 10 * 60 * 1000;
+      }
+    }
     else { state.qMiss[k] = Date.now(); st.miss++; }
     save(); softRender();
     if (qQueue.length && !qCancel) await sleep(Q_DELAY);
@@ -1406,7 +1423,7 @@ async function diagOff(){
   el.hidden = false; sheetCfg = {};
   const F = 'code,product_name,nutriscore_grade';
   const tests = [
-    ['Fiche d’un produit (scan)', 'https://world.openfoodfacts.org/api/v2/product/3017620422003.json?fields=product_name,nutriscore_grade', 10000],
+    ['Fiche d’un produit (scan)', 'https://world.openfoodfacts.org/api/v2/product/3017620422003.json?fields=product_name,nutriscore_grade,nutrition_grades,nutriscore_data,nova_group', 10000],
     ['Recherche rapide', 'https://search.openfoodfacts.org/search?q=lait&langs=fr&page_size=3&fields=' + F, 12000],
     ['Recherche classique', 'https://world.openfoodfacts.org/cgi/search.pl?search_terms=lait&search_simple=1&action=process&json=1&page_size=3&tagtype_0=countries&tag_contains_0=contains&tag_0=france&fields=' + F, 20000]
   ];
@@ -1417,9 +1434,11 @@ async function diagOff(){
     const r = await fetchDetail(url, ms);
     const d = r.data;
     const n = d ? (Array.isArray(d.hits) ? d.hits.length : Array.isArray(d.products) ? d.products.length : (d.status === 1 ? 1 : 0)) : 0;
-    out.push({ label, ok:!r.err && n > 0, err:r.err || (n ? '' : 'aucun résultat'), sec:((Date.now() - t0) / 1000).toFixed(1) });
+    let extra = '';
+    if (d && d.product){ const g = gradeOf(d.product); extra = g ? ', Nutri-Score ' + g.toUpperCase() + ' lu' : ', mais aucun Nutri-Score lisible'; }
+    out.push({ label, ok:!r.err && n > 0, err:r.err || (n ? '' : 'aucun résultat'), sec:((Date.now() - t0) / 1000).toFixed(1), extra });
     const box = $('#diagout'); if (!box) return;
-    box.innerHTML = out.map(o => '<div>' + (o.ok ? '✓' : '✗') + ' ' + esc(o.label) + ' : ' + (o.ok ? 'répond en ' + o.sec + ' s' : esc(o.err)) + '</div>').join('') + (out.length < tests.length ? '<div>Test suivant…</div>' : '');
+    box.innerHTML = out.map(o => '<div>' + (o.ok ? '✓' : '✗') + ' ' + esc(o.label) + ' : ' + (o.ok ? 'répond en ' + o.sec + ' s' + esc(o.extra) : esc(o.err)) + '</div>').join('') + (out.length < tests.length ? '<div>Test suivant…</div>' : '');
   }
   const box = $('#diagout'); if (!box) return;
   const good = out.filter(o => o.ok).length, blocked = out.every(o => /bloquée/.test(o.err));
@@ -1439,7 +1458,7 @@ async function searchOne(key){
   if (qRunning || qOne){ toast('Une recherche est déjà en cours, patientez un instant.'); return; }
   const fin = (r) => (r.ns ? 'Nutri-Score ' + r.ns.toUpperCase() : 'niveau NOVA ' + r.nova);
   const noter = () => (scanOK ? ['Scanner', () => scanForKey(key)] : ['Noter', () => editQuality(key)]);
-  qOne = key; render();
+  qOne = key; qCancel = false; render();
   try {
     const lm = localMatch(key);
     if (lm){
@@ -1447,23 +1466,24 @@ async function searchOne(key){
       toast(cap(h.name) + ' : ' + fin(lm) + ', proche de ' + lm.ref);
       return;
     }
-    toast('Recherche de « ' + h.name + ' »…');
-    const { r, err, why } = await offMatch(h.name, Math.min(Q_DELAY, 1500));
+    const { r, err, why, tries } = await offMatch(h.name, Math.min(Q_DELAY, 6000), 2,
+      (i, n) => toast('Recherche de « ' + h.name + ' » : tentative ' + i + '/' + n + ' (le serveur répond parfois au bout de plusieurs essais)', 'Arrêter', () => { qCancel = true; }));
     if (r){
       hSetQ(key, r); delete state.qMiss[key]; state.searchBlocked = 0; save();
-      toast(cap(h.name) + ' : ' + fin(r) + (r.ref ? ', proche de « ' + r.ref + ' »' : ''));
+      toast(cap(h.name) + ' : ' + fin(r) + (r.ref ? ', proche de « ' + r.ref + ' »' : '') + (tries > 1 ? ' (trouvé à la tentative ' + tries + ')' : ''));
+    } else if (qCancel){
+      toast('Recherche arrêtée');
     } else if (err){
-      if (/bloquée/.test(why || '') && !state.relay) state.searchBlocked = Date.now() + 24 * 3600 * 1000;
       save();
       const [lab, fn] = noter();
-      toast('La recherche par nom est bloquée (' + (why || 'connexion') + '). Scannez le produit pour sa vraie note, ou notez-la vous-même.', lab, fn);
+      toast('La recherche par nom est bloquée ou surchargée (' + (why || 'connexion') + ') après ' + tries + ' tentatives. Scannez le produit pour sa vraie note, ou notez-la vous-même.', lab, fn);
     } else {
       state.qMiss[key] = Date.now(); save();
       const [lab, fn] = noter();
       toast('Aucun produit proche trouvé pour « ' + h.name + ' ».', lab, fn);
     }
   } finally {
-    qOne = '';
+    qOne = ''; qCancel = false;
     if (['stats','list','lists'].includes(tab)) render();
   }
 }
@@ -1478,7 +1498,7 @@ function scanForKey(key){
       if (info.ns || info.nova){
         setQuality(key, { ns:info.ns, nova:info.nova, src:'scan', ref:info.name });
         toast(cap(h.name) + ' : ' + (info.ns ? 'Nutri-Score ' + info.ns.toUpperCase() : 'niveau NOVA ' + info.nova) + ' (scanné)');
-      } else toast('Ce produit n’a pas de Nutri-Score sur Open Food Facts.');
+      } else toast('Pas de Nutri-Score pour ce produit (' + rawGradeTxt(info.raw) + ').');
       save();
     } else {
       toast(info.status === 'error' ? 'Open Food Facts n’a pas répondu (' + lastOffErr + ').' : 'Produit inconnu d’Open Food Facts : notez sa qualité vous-même.');
@@ -1608,6 +1628,11 @@ function spacesHtml(){
   return h + '</div>';
 }
 
+function offLogHtml(){
+  if (!state.offLog.length) return '';
+  return '<p style="margin-top:16px">Dernières recherches (pour comprendre un problème) :</p><div class="lbl" style="gap:4px;font-size:.8rem">' +
+    state.offLog.slice().reverse().map(x => '<div>' + esc(new Date(x.t).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }) + ' ' + x.l) + '</div>').join('') + '</div>';
+}
 function tplHtml(){
   return '<h2>Modèles de listes</h2><div class="card">' + (state.templates.length
     ? '<ul class="list" style="margin:-4px -6px 10px">' + state.templates.map(t => '<li class="orow"><span class="nm">' + esc(t.name) + ' <span class="meta">(' + t.items.length + ' ' + plural(t.items.length,'article','articles') + ')</span></span><button type="button" class="rm" data-act="tpl-del" data-id="' + esc(t.id) + '" aria-label="Supprimer le modèle ' + esc(t.name) + '">' + ICON.x + '</button></li>').join('') + '</ul>'
@@ -1622,7 +1647,7 @@ function settingsHtml(){
       '<button type="button" class="arrow" data-act="down" data-i="' + i + '"' + (i === ord.length-1 ? ' disabled' : '') + ' aria-label="Descendre ' + esc(r) + '">' + ICON.down + '</button></li>').join('') + '</ul>' +
     spacesHtml() +
     tplHtml() +
-    '<h2>Open Food Facts</h2><div class="card"><p>Sert à retrouver le Nutri-Score des produits. Le <b>scan</b> donne la note exacte. Pour les articles non scannés, Caddie les rapproche de vos produits déjà scannés, puis de la moyenne du rayon. Si les notes ne se calculent pas, testez la connexion.</p><div class="row"><button type="button" class="btn soft" data-act="diag-off">Tester la connexion</button></div>' +
+    '<h2>Open Food Facts</h2><div class="card"><p>Sert à retrouver le Nutri-Score des produits. Le <b>scan</b> donne la note exacte. Pour les articles non scannés, Caddie les rapproche de vos produits déjà scannés, puis de la moyenne du rayon. Si les notes ne se calculent pas, testez la connexion.</p><div class="row"><button type="button" class="btn soft" data-act="diag-off">Tester la connexion</button></div>' + offLogHtml() +
       '<p style="margin-top:16px">Relais de recherche (facultatif, pour les utilisateurs avancés) : l’adresse d’un petit service gratuit qui interroge Open Food Facts à votre place. Le fichier <b>relais-cloudflare.js</b> fourni explique comment le créer.</p>' +
       '<div class="join"><input id="relay" class="field" type="url" placeholder="https://votre-relais.workers.dev" value="' + esc(state.relay) + '" autocomplete="off" spellcheck="false" aria-label="Adresse du relais" style="text-transform:none;letter-spacing:0"><button type="button" class="btn" data-act="relay-save">Enregistrer</button></div></div>' +
     (isShared() ? '' : '<h2>Tester l’appli</h2><div class="card"><p>Charge des données d’exemple (achats, prix, dépenses) pour voir les suggestions « À prévoir ? » et les statistiques. « Tout effacer » les supprime.</p><div class="row"><button type="button" class="btn" data-act="demo">Charger un exemple</button></div></div>') +
@@ -1736,6 +1761,23 @@ if (SR){
 const BD = window.BarcodeDetector;
 let scanStop = null, pendingBarcode = null;
 function stopScan(){ if (scanStop){ const f = scanStop; scanStop = null; try { f(); } catch(e){} } }
+function gradeOf(p){
+  if (!p) return '';
+  const nsd = p.nutriscore && typeof p.nutriscore === 'object' ? (p.nutriscore['2025'] || p.nutriscore['2023'] || p.nutriscore['2021'] || {}) : {};
+  const c = [p.nutriscore_grade, p.nutrition_grades, p.nutriscore_data && p.nutriscore_data.grade, nsd.grade];
+  for (const x of c) if (typeof x === 'string' && /^[a-e]$/i.test(x)) return x.toLowerCase();
+  return '';
+}
+function novaOf(p){
+  if (!p) return 0;
+  const n = parseInt(p.nova_group, 10) || parseInt(p.nova_groups, 10);
+  if (n >= 1 && n <= 4) return n;
+  const t = Array.isArray(p.nova_groups_tags) ? p.nova_groups_tags[0] : '';
+  const m = String(t || '').match(/(\d)/);
+  return m && +m[1] >= 1 && +m[1] <= 4 ? +m[1] : 0;
+}
+function offLogAdd(text){ state.offLog.push({ t:Date.now(), l:text }); state.offLog = state.offLog.slice(-12); }
+const rawGradeTxt = r => r === 'not-applicable' ? 'non applicable à ce produit' : (r === 'unknown' || r === 'unknown-not-computed' || !r) ? 'pas encore calculé par Open Food Facts' : 'valeur reçue : ' + r;
 let lastOffErr = '';
 async function fetchDetail(url, ms){
   const ctl = new AbortController();
@@ -1754,12 +1796,12 @@ async function fetchJson(url, ms){
   return r.data;
 }
 async function lookupBarcode(code){
-  const j = await fetchJson('https://world.openfoodfacts.org/api/v2/product/' + code + '.json?fields=product_name,product_name_fr,generic_name_fr,nutriscore_grade,nova_group');
+  const j = await fetchJson('https://world.openfoodfacts.org/api/v2/product/' + code + '.json?fields=product_name,product_name_fr,generic_name_fr,brands,nutriscore_grade,nutrition_grades,nutriscore_data,nutriscore,nova_group,nova_groups,nova_groups_tags');
   if (j === null) return { status:'error' };
   const pr = j && j.status === 1 && j.product;
   const n = pr && (pr.product_name_fr || pr.product_name || pr.generic_name_fr);
   if (!n) return { status:'unknown' };
-  return { status:'ok', name:String(n).trim().slice(0, 50), ns:/^[a-e]$/.test(pr.nutriscore_grade) ? pr.nutriscore_grade : '', nova:parseInt(pr.nova_group, 10) || 0 };
+  return { status:'ok', name:String(n).trim().slice(0, 50), ns:gradeOf(pr), nova:novaOf(pr), raw:String(pr.nutriscore_grade || pr.nutrition_grades || '') };
 }
 function setQuality(key, q){
   delete state.qMiss[key];
@@ -1774,7 +1816,7 @@ function applyScan(it, code, info){
   if (!it.done) toggle(it.id); else { save(); render(); }
   let msg = cap(it.name) + ' dans le caddie';
   if (info && info.ns) msg += ', Nutri-Score ' + info.ns.toUpperCase() + ' (scanné)';
-  else if (info && info.status === 'ok') msg += ', pas de Nutri-Score pour ce produit';
+  else if (info && info.status === 'ok') msg += ', pas de Nutri-Score (' + rawGradeTxt(info.raw) + ')';
   else if (info && info.status === 'error') msg += '. Open Food Facts n’a pas répondu (' + lastOffErr + ') : la note n’est pas mise à jour';
   else if (info && info.status === 'unknown') msg += '. Produit inconnu d’Open Food Facts';
   toast(msg);
@@ -1806,7 +1848,13 @@ async function handleBarcode(code){
   const known = state.barcodes[code];
   if (known){
     const it = state.items.find(i => inCur(i) && !i.done && i.key === norm(known));
-    if (it){ applyScan(it, code, null); return; }
+    if (it){
+      const h0 = state.history[it.key];
+      const needs = !(h0 && h0.q && (h0.q.src === 'scan' || h0.q.src === 'manuel'));
+      if (needs) toast('Code ' + code + ', lecture de la note…');
+      applyScan(it, code, needs ? await lookupBarcode(code) : null);
+      return;
+    }
   }
   toast('Code ' + code + ', recherche du produit…');
   const info = known ? { status:'ok', name:known, ns:'', nova:0 } : await lookupBarcode(code);
